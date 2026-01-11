@@ -432,9 +432,9 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
       <div className="flex justify-between items-center px-2">
         <h2 className="text-2xl font-black">판매 실적 입력</h2>
         <div className="flex gap-2">
-          <button onClick={downloadSampleCsv} className="text-[10px] font-black text-gray-400 hover:text-blue-500 transition-colors">양식 다운로드</button>
+          <button onClick={downloadSampleCsv} className="text-[10px] font-black text-gray-400 hover:text-blue-500 transition-colors">양식</button>
           <button onClick={() => fileInputRef.current?.click()} className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-[10px] font-black text-blue-600 hover:bg-blue-50 transition-all">
-            <i className="fas fa-file-excel mr-1"></i> Excel/CSV 업로드
+            <i className="fas fa-file-excel mr-1"></i> 업로드
           </button>
           <input type="file" ref={fileInputRef} accept=".csv" onChange={handleCsvUpload} className="hidden" />
         </div>
@@ -542,7 +542,8 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
             <div className="space-y-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase px-1">항목 이름</label>
-                <input value={name} onChange={e=>setName(e.target.value)} placeholder="이름" className={`w-full p-4 rounded-xl font-black ${darkMode?'bg-gray-800 text-white':'bg-gray-50 border-none text-gray-900'}`} />
+                {/* Fixed: Wrapped the state setter in an event handler function to match the onChange type expectation. */}
+                <input value={name} onChange={e => setName(e.target.value)} placeholder="이름" className={`w-full p-4 rounded-xl font-black ${darkMode?'bg-gray-800 text-white':'bg-gray-50 border-none text-gray-900'}`} />
               </div>
               {tab === 'platform' && (
                 <div className="space-y-4">
