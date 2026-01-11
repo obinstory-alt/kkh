@@ -32,7 +32,6 @@ const App: React.FC = () => {
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   
-  // 초기 로드 시 로컬 스토리지에서 테마 정보를 가져옴
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const savedTheme = localStorage.getItem('biz_total_v17_theme');
     return savedTheme === 'dark';
@@ -55,8 +54,6 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.PLATFORMS, JSON.stringify(platforms));
     localStorage.setItem(STORAGE_KEYS.SALES, JSON.stringify(sales));
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
-    
-    // 테마 변경 시 로컬 스토리지 저장 및 클래스 적용
     localStorage.setItem(STORAGE_KEYS.THEME, darkMode ? 'dark' : 'light');
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -160,14 +157,14 @@ const App: React.FC = () => {
         </div>
         <NavItem active={view === 'dashboard'} onClick={() => setView('dashboard')} icon="fa-chart-pie" label="홈" darkMode={darkMode} />
         <NavItem active={view === 'sales'} onClick={() => setView('sales')} icon="fa-plus-circle" label="판매입력" darkMode={darkMode} />
-        <NavItem active={view === 'stats'} onClick={() => setView('stats')} icon="fa-magnifying-glass-chart" label="통계" darkMode={darkMode} />
+        <NavItem active={view === 'stats'} onClick={() => setView('stats')} icon="fa-magnifying-glass-chart" label="통계/조회" darkMode={darkMode} />
         <NavItem active={view === 'settings'} onClick={() => setView('settings')} icon="fa-sliders" label="설정" darkMode={darkMode} />
       </nav>
 
       <main className="p-4 md:p-6 max-w-6xl mx-auto">
         {view === 'dashboard' && <Dashboard stats={statsSummary} sales={sales} setSales={setSales} menuItems={menuItems} platforms={platforms} darkMode={darkMode} />}
         {view === 'sales' && <SalesBulkInput menuItems={menuItems} platforms={platforms} onBulkAddSales={handleBulkAddSales} darkMode={darkMode} />}
-        {view === 'stats' && <AdvancedStats sales={sales} expenses={expenses} darkMode={darkMode} />}
+        {view === 'stats' && <AdvancedStats sales={sales} expenses={expenses} menuItems={menuItems} platforms={platforms} setSales={setSales} darkMode={darkMode} />}
         {view === 'settings' && <Settings menuItems={menuItems} setMenuItems={setMenuItems} platforms={platforms} setPlatforms={setPlatforms} expenses={expenses} setExpenses={setExpenses} darkMode={darkMode} setDarkMode={setDarkMode} onBackup={handleBackup} onRestore={handleRestore} />}
       </main>
     </div>
@@ -233,9 +230,23 @@ const Dashboard: React.FC<{ stats: any, sales: SaleRecord[], setSales: any, menu
   );
 };
 
-const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], darkMode: boolean }> = ({ sales, expenses, darkMode }) => {
+const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], menuItems: MenuItem[], platforms: PlatformConfig[], setSales: any, darkMode: boolean }> = ({ sales, expenses, menuItems, platforms, setSales, darkMode }) => {
   const [timeUnit, setTimeUnit] = useState<'daily' | 'monthly' | 'yearly'>('daily');
+  const [searchDate, setSearchDate] = useState(new Date().toISOString().split('T')[0]);
   const COLORS = ['#2563eb', '#f43f5e', '#8b5cf6'];
+
+  const getPName = (id: string) => platforms.find(p => p.id === id)?.name || id;
+  const getMName = (id: string) => menuItems.find(m => m.id === id)?.name || id;
+
+  const filteredSales = useMemo(() => {
+    return sales.filter(s => s.date.startsWith(searchDate));
+  }, [sales, searchDate]);
+
+  const searchSummary = useMemo(() => {
+    const revenue = filteredSales.reduce((acc, s) => acc + s.totalPrice, 0);
+    const settlement = filteredSales.reduce((acc, s) => acc + s.settlementAmount, 0);
+    return { revenue, settlement };
+  }, [filteredSales]);
 
   const aggregated = useMemo(() => {
     const map: Record<string, { label: string, revenue: number, settlement: number, profit: number }> = {};
@@ -260,17 +271,9 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], da
     }).slice(timeUnit === 'daily' ? -14 : -6);
   }, [sales, expenses, timeUnit]);
 
-  const pieData = useMemo(() => {
-    const rev = sales.reduce((acc, s) => acc + s.totalPrice, 0);
-    const fix = expenses.filter(e => e.type === 'fixed').reduce((acc, e) => acc + e.value, 0);
-    const vari = rev * expenses.filter(e => e.type === 'percent').reduce((acc, e) => acc + (e.value/100), 0);
-    const fee = sales.reduce((acc, s) => acc + (s.totalPrice - s.settlementAmount), 0);
-    return [{ name: '고정 지출', value: fix }, { name: '변동 지출', value: vari }, { name: '플랫폼 수수료', value: fee }].filter(d => d.value > 0);
-  }, [sales, expenses]);
-
   return (
-    <div className="space-y-6 animate-in slide-in-from-bottom-8">
-      <header className="flex justify-between items-center">
+    <div className="space-y-6 animate-in slide-in-from-bottom-8 pb-10">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-2xl font-black">비즈니스 심층 분석</h2>
         <div className="flex bg-gray-200 dark:bg-gray-800 p-1 rounded-xl">
           {(['daily', 'monthly', 'yearly'] as const).map(u => (
@@ -280,6 +283,68 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], da
           ))}
         </div>
       </header>
+
+      {/* 날짜별 조회 섹션 */}
+      <div className={`apple-card p-6 space-y-4 ${darkMode ? 'bg-[#2C2C2E]' : ''}`}>
+        <div className="flex justify-between items-center">
+          <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">날짜별 이력 조회</h3>
+          <input 
+            type="date" 
+            value={searchDate} 
+            onChange={e => setSearchDate(e.target.value)}
+            className={`text-xs font-black p-2 rounded-lg border-2 transition-all outline-none ${
+              darkMode 
+                ? 'bg-gray-800 border-gray-700 text-white' 
+                : 'bg-orange-50 border-orange-400 text-orange-700 focus:border-orange-600 shadow-sm'
+            }`}
+          />
+        </div>
+        
+        {filteredSales.length > 0 ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                <p className="text-[10px] font-black text-blue-500 uppercase mb-1">일 매출액</p>
+                <p className="font-black text-blue-600 dark:text-blue-400">{searchSummary.revenue.toLocaleString()}원</p>
+              </div>
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">
+                <p className="text-[10px] font-black text-emerald-500 uppercase mb-1">일 정산액</p>
+                <p className="font-black text-emerald-600 dark:text-emerald-400">{searchSummary.settlement.toLocaleString()}원</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-[10px] font-black text-gray-400 uppercase border-b dark:border-gray-700">
+                    <th className="py-2">플랫폼</th>
+                    <th className="py-2">메뉴</th>
+                    <th className="py-2 text-right">매출</th>
+                    <th className="py-2 text-center">관리</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y dark:divide-gray-700">
+                  {filteredSales.map(s => (
+                    <tr key={s.id} className="group transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="py-3 font-bold text-blue-500">{getPName(s.platformId)}</td>
+                      <td className="py-3 font-medium">{getMName(s.menuId)} x{s.quantity}</td>
+                      <td className="py-3 font-black text-right">{s.totalPrice.toLocaleString()}원</td>
+                      <td className="py-3 text-center">
+                        <button onClick={() => setSales(sales.filter((i: any) => i.id !== s.id))} className="text-gray-300 hover:text-rose-500 transition-colors"><i className="fas fa-trash-alt"></i></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="py-10 text-center">
+            <i className="fas fa-search text-3xl text-gray-200 dark:text-gray-700 mb-3"></i>
+            <p className="text-xs font-bold text-gray-400">선택하신 날짜에 입력된 매출 정보가 없습니다.</p>
+          </div>
+        )}
+      </div>
+
       <div className={`apple-card p-6 ${darkMode ? 'bg-[#2C2C2E]' : ''}`}>
         <h3 className="text-sm font-black mb-6 uppercase tracking-widest text-gray-400">수익성 흐름 (매출 vs 순이익)</h3>
         <div className="h-64 md:h-80">
@@ -293,33 +358,6 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], da
               <Bar dataKey="profit" name="순이익" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-10">
-        <div className={`apple-card p-6 ${darkMode ? 'bg-[#2C2C2E]' : ''}`}>
-          <h3 className="text-sm font-black mb-6 uppercase tracking-widest text-gray-400 text-center">지출 및 원가 비중</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pieData} innerRadius={60} outerRadius={80} paddingAngle={8} dataKey="value">
-                  {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip formatter={(v: any) => `${Math.round(v).toLocaleString()}원`} />
-                <Legend iconType="circle" formatter={(v) => <span className="text-[10px] font-bold text-gray-500">{v}</span>} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="text-[10px] text-center text-gray-400 font-bold mt-2">* 파랑: 고정비 | 빨강: 원가(변동) | 보라: 수수료</div>
-        </div>
-        <div className={`apple-card p-6 flex flex-col justify-center items-center text-center ${darkMode ? 'bg-[#2C2C2E]' : ''}`}>
-           <h3 className="text-sm font-black mb-4 uppercase tracking-widest text-gray-400 self-start">매장 건강 상태</h3>
-           <div className="text-5xl font-black text-emerald-500 mb-2">
-             {aggregated.length > 0 ? Math.round((aggregated.reduce((a,b)=>a+b.profit,0) / aggregated.reduce((a,b)=>a+b.revenue,0)) * 100) : 0}%
-           </div>
-           <p className="text-[10px] font-black text-gray-400 uppercase">평균 수익률</p>
-           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl w-full">
-             <p className="text-xs font-bold text-blue-600 dark:text-blue-400">"지출 항목을 최적화하여 수익률을 높여보세요!"</p>
-           </div>
         </div>
       </div>
     </div>
