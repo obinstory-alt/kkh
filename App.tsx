@@ -4,9 +4,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { MenuItem, PlatformConfig, SaleRecord, ExpenseItem } from './types';
 
 const DEFAULT_PLATFORMS: PlatformConfig[] = [
-  { id: 'baemin', name: '배민', feePercent: 6.8, adjustmentPercent: 3.3 },
-  { id: 'coupang', name: '쿠팡', feePercent: 9.8, adjustmentPercent: 3.3 },
-  { id: 'yogiyo', name: '요기요', feePercent: 12.5, adjustmentPercent: 3.3 },
+  { id: 'baemin', name: '배민', feePercent: 6.8, adjustmentPercent: 0 },
+  { id: 'coupang', name: '쿠팡', feePercent: 9.8, adjustmentPercent: 0 },
+  { id: 'yogiyo', name: '요기요', feePercent: 12.5, adjustmentPercent: 0 },
   { id: 'naver', name: '네이버', feePercent: 3.5, adjustmentPercent: 0 },
   { id: 'store', name: '매장', feePercent: 1.5, adjustmentPercent: 0 },
 ];
@@ -62,11 +62,15 @@ const App: React.FC = () => {
     }
   }, [menuItems, platforms, sales, expenses, darkMode]);
 
+  // 대시보드 요약: 비율(%) 지출은 기간 총 매출액 기준으로 계산
   const statsSummary = useMemo(() => {
     const totalRevenue = sales.reduce((acc, curr) => acc + curr.totalPrice, 0);
     const totalSettlement = sales.reduce((acc, curr) => acc + curr.settlementAmount, 0);
+    
     const fixedCosts = expenses.filter(e => e.type === 'fixed').reduce((acc, curr) => acc + curr.value, 0);
     const variableRate = expenses.filter(e => e.type === 'percent').reduce((acc, curr) => acc + (curr.value / 100), 0);
+    
+    // 최종 지출 = 모든 고정비 + (총 매출액 * 모든 비율지출 합계)
     const totalCosts = fixedCosts + (totalRevenue * variableRate);
     const totalProfit = totalSettlement - totalCosts;
 
@@ -188,7 +192,7 @@ const Dashboard: React.FC<{ stats: any, sales: SaleRecord[], setSales: any, menu
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <StatCard label="총 매출액" value={stats.totalRevenue} color="text-blue-500" darkMode={darkMode} />
         <StatCard label="정산 예정액" value={stats.totalSettlement} color="text-indigo-400" darkMode={darkMode} />
-        <StatCard label="총 지출" value={stats.totalCosts} color="text-rose-500" darkMode={darkMode} />
+        <StatCard label="총 지출(고정+비율)" value={stats.totalCosts} color="text-rose-500" darkMode={darkMode} />
         <StatCard label="최종 순이익" value={stats.totalProfit} color="text-emerald-500" darkMode={darkMode} />
       </div>
       <div className={`apple-card p-6 ${darkMode ? 'bg-[#2C2C2E]' : ''}`}>
@@ -233,7 +237,6 @@ const Dashboard: React.FC<{ stats: any, sales: SaleRecord[], setSales: any, menu
 const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], menuItems: MenuItem[], platforms: PlatformConfig[], setSales: any, darkMode: boolean }> = ({ sales, expenses, menuItems, platforms, setSales, darkMode }) => {
   const [timeUnit, setTimeUnit] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   const [searchDate, setSearchDate] = useState(new Date().toISOString().split('T')[0]);
-  const COLORS = ['#2563eb', '#f43f5e', '#8b5cf6'];
 
   const getPName = (id: string) => platforms.find(p => p.id === id)?.name || id;
   const getMName = (id: string) => menuItems.find(m => m.id === id)?.name || id;
@@ -267,6 +270,7 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
 
     return Object.entries(map).sort(([a],[b]) => a.localeCompare(b)).map(([_, v]) => {
       let fCost = timeUnit === 'daily' ? fixed/30 : timeUnit === 'monthly' ? fixed : fixed*12;
+      // 순이익 = 정산액 - (해당 기간 매출 * 전체 비율지출 %) - 고정비
       return { ...v, profit: v.settlement - (v.revenue * vRate) - fCost };
     }).slice(timeUnit === 'daily' ? -14 : -6);
   }, [sales, expenses, timeUnit]);
@@ -284,7 +288,6 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
         </div>
       </header>
 
-      {/* 날짜별 조회 섹션 */}
       <div className={`apple-card p-6 space-y-4 ${darkMode ? 'bg-[#2C2C2E]' : ''}`}>
         <div className="flex justify-between items-center">
           <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">날짜별 이력 조회</h3>
@@ -439,6 +442,28 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
   const [v2, setV2] = useState('0');
   const [type, setType] = useState<'fixed' | 'percent'>('fixed');
 
+  const startEdit = (item: any, type: 'menu' | 'platform' | 'expense') => {
+    setEditId(item.id);
+    setName(item.name);
+    if (type === 'platform') {
+      setV1(String(item.feePercent));
+      setV2(String(item.adjustmentPercent));
+    } else if (type === 'expense') {
+      setV1(String(item.value));
+      setType(item.type);
+    }
+    setShow(true);
+  };
+
+  const startNew = () => {
+    setEditId(null);
+    setName('');
+    setV1('0');
+    setV2('0');
+    setType('fixed');
+    setShow(true);
+  };
+
   const save = () => {
     if (!name) return;
     if (tab === 'menu') {
@@ -467,13 +492,22 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
       <div className={`apple-card p-6 min-h-[300px] ${darkMode ? 'bg-[#2C2C2E]' : ''}`}>
         {show ? (
           <div className="space-y-6 max-w-sm mx-auto animate-in zoom-in-95">
-            <h4 className="font-black text-lg">항목 {editId ? '수정' : '추가'}</h4>
+            <h4 className="font-black text-lg">{editId ? '항목 수정' : '새 항목 추가'}</h4>
             <div className="space-y-4">
-              <input value={name} onChange={e=>setName(e.target.value)} placeholder="이름" className={`w-full p-4 rounded-xl font-black ${darkMode?'bg-gray-800':'bg-gray-50 border-none'}`} />
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase px-1">항목 이름</label>
+                <input value={name} onChange={e=>setName(e.target.value)} placeholder="이름" className={`w-full p-4 rounded-xl font-black ${darkMode?'bg-gray-800 text-white':'bg-gray-50 border-none text-gray-900'}`} />
+              </div>
               {tab === 'platform' && (
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="number" step="0.1" value={v1} onChange={e=>setV1(e.target.value)} className={`p-4 rounded-xl font-black ${darkMode?'bg-gray-800 text-blue-400':'bg-gray-50'}`} />
-                  <input type="number" step="0.1" value={v2} onChange={e=>setV2(e.target.value)} className={`p-4 rounded-xl font-black ${darkMode?'bg-gray-800 text-rose-400':'bg-gray-50'}`} />
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase px-1">중개 수수료 (%)</label>
+                    <input type="number" step="0.1" value={v1} onChange={e=>setV1(e.target.value)} className={`w-full p-4 rounded-xl font-black ${darkMode?'bg-gray-800 text-blue-400':'bg-gray-100 text-blue-600'}`} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase px-1">카드/결제/조정 수수료 (%)</label>
+                    <input type="number" step="0.1" value={v2} onChange={e=>setV2(e.target.value)} className={`w-full p-4 rounded-xl font-black ${darkMode?'bg-gray-800 text-rose-400':'bg-gray-100 text-rose-600'}`} />
+                  </div>
                 </div>
               )}
               {tab === 'expense' && (
@@ -482,33 +516,52 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
                     <button onClick={()=>setType('fixed')} className={`flex-1 py-2 rounded-lg text-[10px] font-black ${type==='fixed'?'bg-white dark:bg-gray-700 text-blue-600 shadow-sm':'text-gray-500'}`}>고정금(원)</button>
                     <button onClick={()=>setType('percent')} className={`flex-1 py-2 rounded-lg text-[10px] font-black ${type==='percent'?'bg-white dark:bg-gray-700 text-rose-500 shadow-sm':'text-gray-500'}`}>비율(%)</button>
                   </div>
+                  <p className="text-[10px] text-gray-400 px-1 font-medium">
+                    {type === 'percent' ? '* 월 전체 매출액 대비 설정하신 비율(%)로 지출을 계산합니다.' : '* 매달 고정적으로 발생하는 비용(임대료 등)을 입력하세요.'}
+                  </p>
                   <input type="number" value={v1} onChange={e=>setV1(e.target.value)} className={`w-full p-4 rounded-xl font-black ${darkMode?'bg-gray-800 text-emerald-400':'bg-gray-50'}`} />
                 </div>
               )}
             </div>
-            <button onClick={save} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black">저장</button>
-            <button onClick={()=>setShow(false)} className="w-full py-3 text-gray-400 font-black text-xs">취소</button>
+            <button onClick={save} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-lg">저장하기</button>
+            <button onClick={()=>{setShow(false); setEditId(null); setName('');}} className="w-full py-3 text-gray-400 font-black text-xs">취소</button>
           </div>
         ) : (
           <div className="space-y-4">
-            <button onClick={()=>setShow(true)} className="w-full py-4 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl text-gray-400 font-black text-sm hover:border-blue-300 transition-all">+ 새 항목 추가</button>
+            <button onClick={startNew} className="w-full py-4 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl text-gray-400 font-black text-sm hover:border-blue-300 transition-all">+ 새 항목 추가</button>
             <div className="grid gap-2">
               {tab === 'menu' && menuItems.map(m => (
-                <div key={m.id} className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl">
+                <div key={m.id} className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl group">
                   <span className="font-black text-sm">{m.name}</span>
-                  <button onClick={()=>setMenuItems(menuItems.filter(i=>i.id!==m.id))} className="text-gray-400 hover:text-rose-500"><i className="fas fa-trash-alt"></i></button>
+                  <div className="flex gap-4">
+                    <button onClick={()=>startEdit(m, 'menu')} className="text-gray-300 hover:text-blue-500 transition-colors"><i className="fas fa-edit"></i></button>
+                    <button onClick={()=>setMenuItems(menuItems.filter(i=>i.id!==m.id))} className="text-gray-300 hover:text-rose-500 transition-colors"><i className="fas fa-trash-alt"></i></button>
+                  </div>
                 </div>
               ))}
               {tab === 'platform' && platforms.map(p => (
-                <div key={p.id} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-between items-center">
-                  <div><p className="font-black text-sm">{p.name}</p><p className="text-[9px] font-bold text-gray-400">수수료 {p.feePercent}% / 조정 {p.adjustmentPercent}%</p></div>
-                  <button onClick={()=>setPlatforms(platforms.filter(i=>i.id!==p.id))} className="text-gray-400 hover:text-rose-500"><i className="fas fa-trash-alt"></i></button>
+                <div key={p.id} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-between items-center group">
+                  <div>
+                    <p className="font-black text-sm">{p.name}</p>
+                    <p className="text-[9px] font-bold text-gray-400">수수료 {p.feePercent}% / 조정 {p.adjustmentPercent}%</p>
+                  </div>
+                  <div className="flex gap-4">
+                    <button onClick={()=>startEdit(p, 'platform')} className="text-gray-300 hover:text-blue-500 transition-colors"><i className="fas fa-edit"></i></button>
+                    <button onClick={()=>setPlatforms(platforms.filter(i=>i.id!==p.id))} className="text-gray-300 hover:text-rose-500 transition-colors"><i className="fas fa-trash-alt"></i></button>
+                  </div>
                 </div>
               ))}
               {tab === 'expense' && expenses.map(e => (
-                <div key={e.id} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-between items-center">
-                  <div><p className="font-black text-sm">{e.name}</p><p className="text-[9px] font-bold text-gray-400">{e.type==='fixed'?'월 고정비':'매출 대비 원가'}</p></div>
-                  <div className="flex items-center gap-4"><span className="font-black text-sm">{e.value.toLocaleString()}{e.type==='fixed'?'원':'%'}</span><button onClick={()=>setExpenses(expenses.filter(i=>i.id!==e.id))} className="text-gray-400 hover:text-rose-500"><i className="fas fa-trash-alt"></i></button></div>
+                <div key={e.id} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-between items-center group">
+                  <div>
+                    <p className="font-black text-sm">{e.name}</p>
+                    <p className="text-[9px] font-bold text-gray-400">{e.type==='fixed'?'월 고정비':'월 전체 매출 대비 비율(%)'}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="font-black text-sm">{e.value.toLocaleString()}{e.type==='fixed'?'원':'%'}</span>
+                    <button onClick={()=>startEdit(e, 'expense')} className="text-gray-300 hover:text-blue-500 transition-colors"><i className="fas fa-edit"></i></button>
+                    <button onClick={()=>setExpenses(expenses.filter(i=>i.id!==e.id))} className="text-gray-300 hover:text-rose-500 transition-colors"><i className="fas fa-trash-alt"></i></button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -528,9 +581,6 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
             <span className="text-[10px] font-black text-emerald-600">복원 (가져오기)</span>
             <input type="file" accept=".json" onChange={onRestore} className="hidden" />
           </label>
-        </div>
-        <div className="text-[9px] text-gray-400 font-medium px-1">
-          * 백업 파일을 카톡이나 이메일에 보내두면 기기 변경 시 복구가 가능합니다.
         </div>
       </div>
 
