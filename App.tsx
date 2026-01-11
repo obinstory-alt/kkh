@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import { MenuItem, PlatformConfig, SaleRecord, ExpenseItem } from './types';
 
 const DEFAULT_PLATFORMS: PlatformConfig[] = [
@@ -94,7 +94,6 @@ const App: React.FC = () => {
       const commission = totalPrice * (totalFeePercent / 100);
       const settlementAmount = totalPrice - commission;
       
-      // 날짜 결정: 항목별 날짜가 있으면 그것을 쓰고, 없으면 선택된 날짜(dateOverride) 사용
       const finalDateStr = item.date || dateOverride || new Date().toISOString().split('T')[0];
       const targetDate = new Date(finalDateStr);
       const now = new Date();
@@ -162,7 +161,7 @@ const App: React.FC = () => {
         </div>
         <NavItem active={view === 'dashboard'} onClick={() => setView('dashboard')} icon="fa-chart-pie" label="홈" darkMode={darkMode} />
         <NavItem active={view === 'sales'} onClick={() => setView('sales')} icon="fa-plus-circle" label="판매입력" darkMode={darkMode} />
-        <NavItem active={view === 'stats'} onClick={() => setView('stats'} icon="fa-magnifying-glass-chart" label="통계/조회" darkMode={darkMode} />
+        <NavItem active={view === 'stats'} onClick={() => setView('stats')} icon="fa-magnifying-glass-chart" label="통계/조회" darkMode={darkMode} />
         <NavItem active={view === 'settings'} onClick={() => setView('settings')} icon="fa-sliders" label="설정" darkMode={darkMode} />
       </nav>
 
@@ -378,12 +377,12 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
     reader.onload = (event) => {
       const text = event.target?.result as string;
       const lines = text.split('\n');
-      // 헤더 제외: 날짜, 플랫폼명, 메뉴명, 수량, 총가격
       const parsedData: Record<string, any[]> = {};
 
       lines.slice(1).forEach(line => {
-        const [csvDate, csvPlatform, csvMenu, csvQty, csvPrice] = line.split(',').map(s => s?.trim());
-        if (!csvPlatform || !csvMenu) return;
+        const parts = line.split(',').map(s => s?.trim());
+        if (parts.length < 5) return;
+        const [csvDate, csvPlatform, csvMenu, csvQty, csvPrice] = parts;
 
         const targetPlatform = platforms.find(p => p.name === csvPlatform);
         const targetMenu = menuItems.find(m => m.name === csvMenu);
@@ -408,7 +407,7 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
       if (addedCount > 0) {
         alert(`${addedCount}건의 판매 실적이 성공적으로 등록되었습니다.`);
       } else {
-        alert('매칭되는 플랫폼이나 메뉴를 찾지 못했습니다. 양식을 확인해주세요.');
+        alert('매칭되는 플랫폼이나 메뉴를 찾지 못했습니다. 파일 양식과 등록된 메뉴명을 확인해주세요.');
       }
     };
     reader.readAsText(file);
@@ -417,7 +416,9 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
 
   const downloadSampleCsv = () => {
     const header = "날짜,플랫폼명,메뉴명,수량,총결제액\n";
-    const sample = `${new Date().toISOString().split('T')[0]},${platforms[0]?.name || '배민'},${menuItems[0]?.name || '메뉴명'},1,15000`;
+    const pName = platforms[0]?.name || '배민';
+    const mName = menuItems[0]?.name || '메뉴명';
+    const sample = `${new Date().toISOString().split('T')[0]},${pName},${mName},1,15000`;
     const blob = new Blob(["\uFEFF" + header + sample], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -461,11 +462,6 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
         </div>
 
         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-          <div className="grid grid-cols-12 gap-3 px-4 text-[10px] font-black text-gray-400 uppercase">
-            <div className="col-span-4">메뉴</div>
-            <div className="col-span-3 text-center">수량</div>
-            <div className="col-span-5 text-right">총 결제액</div>
-          </div>
           {menuItems.map(m => (
             <div key={m.id} className={`grid grid-cols-12 gap-2 items-center p-3 rounded-2xl border ${darkMode?'bg-gray-800/50 border-transparent':'bg-gray-50 border-gray-100'}`}>
               <div className="col-span-4 text-xs font-black truncate">{m.name}</div>
