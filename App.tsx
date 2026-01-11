@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie, Legend } from 'recharts';
 import { MenuItem, PlatformConfig, SaleRecord, ExpenseItem } from './types';
 
@@ -62,7 +62,6 @@ const App: React.FC = () => {
     }
   }, [menuItems, platforms, sales, expenses, darkMode]);
 
-  // 대시보드 요약: 비율(%) 지출은 기간 총 매출액 기준으로 계산
   const statsSummary = useMemo(() => {
     const totalRevenue = sales.reduce((acc, curr) => acc + curr.totalPrice, 0);
     const totalSettlement = sales.reduce((acc, curr) => acc + curr.settlementAmount, 0);
@@ -70,7 +69,6 @@ const App: React.FC = () => {
     const fixedCosts = expenses.filter(e => e.type === 'fixed').reduce((acc, curr) => acc + curr.value, 0);
     const variableRate = expenses.filter(e => e.type === 'percent').reduce((acc, curr) => acc + (curr.value / 100), 0);
     
-    // 최종 지출 = 모든 고정비 + (총 매출액 * 모든 비율지출 합계)
     const totalCosts = fixedCosts + (totalRevenue * variableRate);
     const totalProfit = totalSettlement - totalCosts;
 
@@ -86,7 +84,7 @@ const App: React.FC = () => {
     return { totalRevenue, totalSettlement, totalProfit, totalCosts, trendData };
   }, [sales, expenses]);
 
-  const handleBulkAddSales = (platformId: string, salesList: { menuId: string, qty: number, price: number }[], date: string) => {
+  const handleBulkAddSales = (platformId: string, salesList: { menuId: string, qty: number, price: number, date?: string }[], dateOverride?: string) => {
     const platform = platforms.find(p => p.id === platformId);
     if (!platform) return;
 
@@ -95,7 +93,10 @@ const App: React.FC = () => {
       const totalFeePercent = (platform.feePercent || 0) + (platform.adjustmentPercent || 0);
       const commission = totalPrice * (totalFeePercent / 100);
       const settlementAmount = totalPrice - commission;
-      const targetDate = new Date(date);
+      
+      // 날짜 결정: 항목별 날짜가 있으면 그것을 쓰고, 없으면 선택된 날짜(dateOverride) 사용
+      const finalDateStr = item.date || dateOverride || new Date().toISOString().split('T')[0];
+      const targetDate = new Date(finalDateStr);
       const now = new Date();
       targetDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
 
@@ -110,7 +111,7 @@ const App: React.FC = () => {
         netProfit: settlementAmount,
       };
     });
-    setSales([...newRecords, ...sales]);
+    setSales(prev => [...newRecords, ...prev]);
   };
 
   const handleBackup = () => {
@@ -156,12 +157,12 @@ const App: React.FC = () => {
     <div className={`min-h-screen pb-24 lg:pb-0 lg:pl-64 transition-colors duration-300 ${darkMode ? 'bg-[#1C1C1E] text-white' : 'bg-[#F5F5F7] text-gray-900'}`}>
       <nav className={`fixed bottom-0 left-0 right-0 lg:top-0 lg:w-64 lg:h-full border-t lg:border-t-0 lg:border-r z-50 px-2 py-2 lg:p-4 flex lg:flex-col justify-around lg:justify-start gap-1 lg:gap-4 transition-colors duration-300 ${darkMode ? 'bg-[#2C2C2E]/90 border-gray-700' : 'bg-white/90 border-gray-200'} backdrop-blur-xl`}>
         <div className="hidden lg:block mb-10 mt-4 px-4">
-          <h1 className="text-xl font-black tracking-tight">사장님 계산기</h1>
-          <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest">v17 Final Stable</p>
+          <h1 className="text-xl font-black tracking-tight text-blue-600">사장님 계산기</h1>
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Master Edition</p>
         </div>
         <NavItem active={view === 'dashboard'} onClick={() => setView('dashboard')} icon="fa-chart-pie" label="홈" darkMode={darkMode} />
         <NavItem active={view === 'sales'} onClick={() => setView('sales')} icon="fa-plus-circle" label="판매입력" darkMode={darkMode} />
-        <NavItem active={view === 'stats'} onClick={() => setView('stats')} icon="fa-magnifying-glass-chart" label="통계/조회" darkMode={darkMode} />
+        <NavItem active={view === 'stats'} onClick={() => setView('stats'} icon="fa-magnifying-glass-chart" label="통계/조회" darkMode={darkMode} />
         <NavItem active={view === 'settings'} onClick={() => setView('settings')} icon="fa-sliders" label="설정" darkMode={darkMode} />
       </nav>
 
@@ -210,26 +211,6 @@ const Dashboard: React.FC<{ stats: any, sales: SaleRecord[], setSales: any, menu
           </ResponsiveContainer>
         </div>
       </div>
-      <div className={`apple-card overflow-hidden ${darkMode ? 'bg-[#2C2C2E]' : ''}`}>
-        <div className="p-4 border-b dark:border-gray-700 font-black text-[10px] text-gray-400 uppercase tracking-widest">최근 판매 내역</div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[400px]">
-            <tbody className="divide-y dark:divide-gray-700">
-              {sales.slice(0, 5).map(s => (
-                <tr key={s.id} className="text-sm group hover:bg-blue-50/10 transition-colors">
-                  <td className="px-5 py-4 text-gray-400 text-[10px] font-black">{s.date.split('T')[0].slice(5)}</td>
-                  <td className="px-5 py-4"><span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-[10px] font-black">{getPName(s.platformId)}</span></td>
-                  <td className="px-5 py-4 font-bold">{getMName(s.menuId)} x{s.quantity}</td>
-                  <td className="px-5 py-4 font-black text-right">{s.totalPrice.toLocaleString()}원</td>
-                  <td className="px-5 py-4 text-right">
-                    <button onClick={() => setSales(sales.filter((i: any) => i.id !== s.id))} className="text-gray-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><i className="fas fa-trash-alt"></i></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 };
@@ -270,7 +251,6 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
 
     return Object.entries(map).sort(([a],[b]) => a.localeCompare(b)).map(([_, v]) => {
       let fCost = timeUnit === 'daily' ? fixed/30 : timeUnit === 'monthly' ? fixed : fixed*12;
-      // 순이익 = 정산액 - (해당 기간 매출 * 전체 비율지출 %) - 고정비
       return { ...v, profit: v.settlement - (v.revenue * vRate) - fCost };
     }).slice(timeUnit === 'daily' ? -14 : -6);
   }, [sales, expenses, timeUnit]);
@@ -374,11 +354,12 @@ const StatCard: React.FC<{ label: string; value: number; color: string; darkMode
   </div>
 );
 
-const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig[], onBulkAddSales: (p: string, s: any[], d: string) => void, darkMode: boolean }> = ({ menuItems, platforms, onBulkAddSales, darkMode }) => {
+const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig[], onBulkAddSales: (p: string, s: any[], d?: string) => void, darkMode: boolean }> = ({ menuItems, platforms, onBulkAddSales, darkMode }) => {
   const [platform, setPlatform] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [data, setData] = useState<Record<string, { qty: string, price: string }>>({});
   const [msg, setMsg] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const save = () => {
     const list = (Object.entries(data) as [string, { qty: string, price: string }][])
@@ -389,27 +370,96 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
     setMsg(true); setTimeout(() => setMsg(false), 2000); setData({});
   };
 
+  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const lines = text.split('\n');
+      // 헤더 제외: 날짜, 플랫폼명, 메뉴명, 수량, 총가격
+      const parsedData: Record<string, any[]> = {};
+
+      lines.slice(1).forEach(line => {
+        const [csvDate, csvPlatform, csvMenu, csvQty, csvPrice] = line.split(',').map(s => s?.trim());
+        if (!csvPlatform || !csvMenu) return;
+
+        const targetPlatform = platforms.find(p => p.name === csvPlatform);
+        const targetMenu = menuItems.find(m => m.name === csvMenu);
+
+        if (targetPlatform && targetMenu) {
+          if (!parsedData[targetPlatform.id]) parsedData[targetPlatform.id] = [];
+          parsedData[targetPlatform.id].push({
+            date: csvDate,
+            menuId: targetMenu.id,
+            qty: Number(csvQty),
+            price: Number(csvPrice)
+          });
+        }
+      });
+
+      let addedCount = 0;
+      Object.entries(parsedData).forEach(([pId, list]) => {
+        onBulkAddSales(pId, list);
+        addedCount += list.length;
+      });
+
+      if (addedCount > 0) {
+        alert(`${addedCount}건의 판매 실적이 성공적으로 등록되었습니다.`);
+      } else {
+        alert('매칭되는 플랫폼이나 메뉴를 찾지 못했습니다. 양식을 확인해주세요.');
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const downloadSampleCsv = () => {
+    const header = "날짜,플랫폼명,메뉴명,수량,총결제액\n";
+    const sample = `${new Date().toISOString().split('T')[0]},${platforms[0]?.name || '배민'},${menuItems[0]?.name || '메뉴명'},1,15000`;
+    const blob = new Blob(["\uFEFF" + header + sample], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', '매출업로드_양식.csv');
+    link.click();
+  };
+
   return (
     <div className="max-w-3xl mx-auto space-y-4 animate-in slide-in-from-bottom-8">
-      <div className="flex justify-between items-end px-2">
+      <div className="flex justify-between items-center px-2">
         <h2 className="text-2xl font-black">판매 실적 입력</h2>
-        <input 
-          type="date" 
-          value={date} 
-          onChange={e=>setDate(e.target.value)} 
-          className={`text-xs font-black p-2 rounded-lg border-2 transition-all outline-none ${
-            darkMode 
-              ? 'bg-gray-800 border-gray-700 text-white' 
-              : 'bg-blue-50 border-blue-600 text-blue-700 focus:border-orange-500 shadow-sm'
-          }`} 
-        />
+        <div className="flex gap-2">
+          <button onClick={downloadSampleCsv} className="text-[10px] font-black text-gray-400 hover:text-blue-500 transition-colors">양식 다운로드</button>
+          <button onClick={() => fileInputRef.current?.click()} className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-[10px] font-black text-blue-600 hover:bg-blue-50 transition-all">
+            <i className="fas fa-file-excel mr-1"></i> Excel/CSV 업로드
+          </button>
+          <input type="file" ref={fileInputRef} accept=".csv" onChange={handleCsvUpload} className="hidden" />
+        </div>
       </div>
+      
       <div className={`apple-card p-6 space-y-6 shadow-2xl ${darkMode ? 'bg-[#2C2C2E]' : ''}`}>
+        <div className="flex justify-between items-center">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">수동 입력</p>
+          <input 
+            type="date" 
+            value={date} 
+            onChange={e=>setDate(e.target.value)} 
+            className={`text-xs font-black p-2 rounded-lg border-2 transition-all outline-none ${
+              darkMode 
+                ? 'bg-gray-800 border-gray-700 text-white' 
+                : 'bg-blue-50 border-blue-600 text-blue-700 focus:border-orange-500 shadow-sm'
+            }`} 
+          />
+        </div>
+
         <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
           {platforms.map(p => (
             <button key={p.id} onClick={()=>setPlatform(p.id)} className={`flex-none px-6 py-3 rounded-xl font-black text-xs border-2 transition-all ${platform === p.id ? 'bg-blue-600 border-blue-600 text-white' : 'bg-gray-50 dark:bg-gray-800 border-transparent text-gray-400'}`}>{p.name}</button>
           ))}
         </div>
+
         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
           <div className="grid grid-cols-12 gap-3 px-4 text-[10px] font-black text-gray-400 uppercase">
             <div className="col-span-4">메뉴</div>
