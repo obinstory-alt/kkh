@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
-import { MenuItem, PlatformConfig, SaleRecord, ExpenseItem } from './types';
+import { MenuItem, PlatformConfig, SaleRecord, ExpenseItem, DailyMemo } from './types';
 
 const DEFAULT_PLATFORMS: PlatformConfig[] = [
   { id: 'baemin', name: '배민', feePercent: 6.8, adjustmentPercent: 0 },
@@ -23,6 +23,7 @@ const App: React.FC = () => {
     PLATFORMS: 'biz_total_v17_platforms',
     SALES: 'biz_total_v17_sales',
     EXPENSES: 'biz_total_v17_expenses',
+    MEMOS: 'biz_total_v17_memos',
     THEME: 'biz_total_v17_theme'
   };
 
@@ -31,10 +32,11 @@ const App: React.FC = () => {
   const [platforms, setPlatforms] = useState<PlatformConfig[]>(DEFAULT_PLATFORMS);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
+  const [memos, setMemos] = useState<DailyMemo[]>([]);
   
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const savedTheme = localStorage.getItem('biz_total_v17_theme');
-    return savedTheme !== 'light'; // 기본값을 다크모드로 설정
+    return savedTheme !== 'light';
   });
 
   useEffect(() => {
@@ -42,11 +44,13 @@ const App: React.FC = () => {
     const savedPlatforms = localStorage.getItem(STORAGE_KEYS.PLATFORMS);
     const savedSales = localStorage.getItem(STORAGE_KEYS.SALES);
     const savedExpenses = localStorage.getItem(STORAGE_KEYS.EXPENSES);
+    const savedMemos = localStorage.getItem(STORAGE_KEYS.MEMOS);
 
     setMenuItems(savedMenu ? JSON.parse(savedMenu) : INITIAL_MENU);
     setPlatforms(savedPlatforms ? JSON.parse(savedPlatforms) : DEFAULT_PLATFORMS);
     setSales(savedSales ? JSON.parse(savedSales) : []);
     setExpenses(savedExpenses ? JSON.parse(savedExpenses) : []);
+    setMemos(savedMemos ? JSON.parse(savedMemos) : []);
   }, []);
 
   useEffect(() => {
@@ -54,13 +58,14 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.PLATFORMS, JSON.stringify(platforms));
     localStorage.setItem(STORAGE_KEYS.SALES, JSON.stringify(sales));
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+    localStorage.setItem(STORAGE_KEYS.MEMOS, JSON.stringify(memos));
     localStorage.setItem(STORAGE_KEYS.THEME, darkMode ? 'dark' : 'light');
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, [menuItems, platforms, sales, expenses, darkMode]);
+  }, [menuItems, platforms, sales, expenses, memos, darkMode]);
 
   const statsSummary = useMemo(() => {
     const totalRevenue = sales.reduce((acc, curr) => acc + curr.totalPrice, 0);
@@ -82,36 +87,20 @@ const App: React.FC = () => {
     return { totalRevenue, totalSettlement, totalProfit, totalCosts, trendData };
   }, [sales, expenses]);
 
-  const handleBulkAddSales = (platformId: string, salesList: { menuId: string, qty: number, price: number, date?: string }[], dateOverride?: string) => {
-    const platform = platforms.find(p => p.id === platformId);
-    if (!platform) return;
+  const handleBulkAddSales = (records: SaleRecord[]) => {
+    setSales(prev => [...records, ...prev]);
+  };
 
-    const newRecords: SaleRecord[] = salesList.map(item => {
-      const totalPrice = item.price;
-      const totalFeePercent = (platform.feePercent || 0) + (platform.adjustmentPercent || 0);
-      const commission = totalPrice * (totalFeePercent / 100);
-      const settlementAmount = totalPrice - commission;
-      const finalDateStr = item.date || dateOverride || new Date().toISOString().split('T')[0];
-      const targetDate = new Date(finalDateStr);
-      const now = new Date();
-      targetDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
-
-      return {
-        id: crypto.randomUUID(),
-        date: targetDate.toISOString(),
-        platformId,
-        menuId: item.menuId,
-        quantity: item.qty,
-        totalPrice,
-        settlementAmount,
-        netProfit: settlementAmount,
-      };
+  const handleSaveMemo = (date: string, content: string) => {
+    setMemos(prev => {
+      const filtered = prev.filter(m => m.date !== date);
+      if (!content.trim()) return filtered;
+      return [...filtered, { date, content }];
     });
-    setSales(prev => [...newRecords, ...prev]);
   };
 
   const handleBackup = () => {
-    const data = { menu: menuItems, platforms, sales, expenses, backupDate: new Date().toISOString() };
+    const data = { menu: menuItems, platforms, sales, expenses, memos, backupDate: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -133,6 +122,7 @@ const App: React.FC = () => {
           if (data.platforms) setPlatforms(data.platforms);
           if (data.sales) setSales(data.sales);
           if (data.expenses) setExpenses(data.expenses);
+          if (data.memos) setMemos(data.memos);
           alert('복구가 완료되었습니다!');
           window.location.reload();
         }
@@ -152,14 +142,14 @@ const App: React.FC = () => {
         </div>
         <NavItem active={view === 'dashboard'} onClick={() => setView('dashboard')} icon="fa-chart-pie" label="홈" darkMode={darkMode} />
         <NavItem active={view === 'sales'} onClick={() => setView('sales')} icon="fa-plus-circle" label="판매입력" darkMode={darkMode} />
-        <NavItem active={view === 'stats'} onClick={() => setView('stats')} icon="fa-magnifying-glass-chart" label="심층분석" darkMode={darkMode} />
+        <NavItem active={view === 'stats'} onClick={() => setView('stats'} icon="fa-magnifying-glass-chart" label="심층분석" darkMode={darkMode} />
         <NavItem active={view === 'settings'} onClick={() => setView('settings')} icon="fa-sliders" label="설정" darkMode={darkMode} />
       </nav>
 
       <main className="p-4 md:p-8 max-w-6xl mx-auto">
         {view === 'dashboard' && <Dashboard stats={statsSummary} darkMode={darkMode} />}
-        {view === 'sales' && <SalesBulkInput menuItems={menuItems} platforms={platforms} onBulkAddSales={handleBulkAddSales} darkMode={darkMode} />}
-        {view === 'stats' && <AdvancedStats sales={sales} expenses={expenses} menuItems={menuItems} platforms={platforms} setSales={setSales} darkMode={darkMode} />}
+        {view === 'sales' && <SalesBulkInput menuItems={menuItems} platforms={platforms} memos={memos} onFinalSubmit={handleBulkAddSales} onSaveMemo={handleSaveMemo} darkMode={darkMode} />}
+        {view === 'stats' && <AdvancedStats sales={sales} expenses={expenses} menuItems={menuItems} platforms={platforms} memos={memos} setSales={setSales} darkMode={darkMode} />}
         {view === 'settings' && <Settings menuItems={menuItems} setMenuItems={setMenuItems} platforms={platforms} setPlatforms={setPlatforms} expenses={expenses} setExpenses={setExpenses} darkMode={darkMode} setDarkMode={setDarkMode} onBackup={handleBackup} onRestore={handleRestore} />}
       </main>
     </div>
@@ -213,7 +203,7 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
   </div>
 );
 
-const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], menuItems: MenuItem[], platforms: PlatformConfig[], setSales: any, darkMode: boolean }> = ({ sales, expenses, menuItems, platforms, setSales, darkMode }) => {
+const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], menuItems: MenuItem[], platforms: PlatformConfig[], memos: DailyMemo[], setSales: any, darkMode: boolean }> = ({ sales, expenses, menuItems, platforms, memos, setSales, darkMode }) => {
   const [timeUnit, setTimeUnit] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   const [searchDate, setSearchDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -221,6 +211,8 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
   const getMName = (id: string) => menuItems.find(m => m.id === id)?.name || id;
 
   const filteredSales = useMemo(() => sales.filter(s => s.date.startsWith(searchDate)), [sales, searchDate]);
+  const currentMemo = useMemo(() => memos.find(m => m.date === searchDate)?.content || '', [memos, searchDate]);
+
   const searchSummary = useMemo(() => {
     const revenue = filteredSales.reduce((acc, s) => acc + s.totalPrice, 0);
     const settlement = filteredSales.reduce((acc, s) => acc + s.settlementAmount, 0);
@@ -272,6 +264,14 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
             className={`text-sm font-bold p-3 rounded-2xl border-none outline-none transition-all ${darkMode ? 'bg-[#2C2C2E] text-white' : 'bg-gray-100 text-gray-900 focus:ring-2 ring-blue-500'}`}
           />
         </div>
+
+        {/* 메모 조회 섹션 */}
+        {currentMemo && (
+          <div className={`p-6 rounded-3xl border-l-4 border-amber-400 ${darkMode ? 'bg-amber-400/5' : 'bg-amber-50'}`}>
+            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2"><i className="fas fa-sticky-note mr-1"></i> 당일 특이사항</p>
+            <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">{currentMemo}</p>
+          </div>
+        )}
         
         {filteredSales.length > 0 ? (
           <div className="space-y-6">
@@ -344,95 +344,195 @@ const StatCard: React.FC<{ label: string; value: number; color: string; darkMode
   </div>
 );
 
-const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig[], onBulkAddSales: (p: string, s: any[], d?: string) => void, darkMode: boolean }> = ({ menuItems, platforms, onBulkAddSales, darkMode }) => {
+const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig[], memos: DailyMemo[], onFinalSubmit: (records: SaleRecord[]) => void, onSaveMemo: (date: string, content: string) => void, darkMode: boolean }> = ({ menuItems, platforms, memos, onFinalSubmit, onSaveMemo, darkMode }) => {
   const [platform, setPlatform] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [data, setData] = useState<Record<string, { qty: string, price: string }>>({});
-  const [msg, setMsg] = useState(false);
+  const [formData, setFormData] = useState<Record<string, { qty: string, price: string }>>({});
+  const [tempQueue, setTempQueue] = useState<SaleRecord[]>([]);
+  const [memoContent, setMemoContent] = useState('');
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [memoSaved, setMemoSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const save = () => {
-    const list = Object.entries(data).filter(([_, v]) => Number(v.qty) > 0).map(([id, v]) => ({ menuId: id, qty: Number(v.qty), price: Number(v.price) || 0 }));
-    if (!platform || list.length === 0) return;
-    onBulkAddSales(platform, list, date);
-    setMsg(true); setTimeout(() => setMsg(false), 2000); setData({});
-  };
+  useEffect(() => {
+    const existingMemo = memos.find(m => m.date === date);
+    setMemoContent(existingMemo ? existingMemo.content : '');
+  }, [date, memos]);
 
-  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split('\n');
-      const parsedData: Record<string, any[]> = {};
-      lines.slice(1).forEach(line => {
-        const parts = line.split(',').map(s => s?.trim());
-        if (parts.length < 5) return;
-        const [csvDate, csvPlatform, csvMenu, csvQty, csvPrice] = parts;
-        const targetPlatform = platforms.find(p => p.name === csvPlatform);
-        const targetMenu = menuItems.find(m => m.name === csvMenu);
-        if (targetPlatform && targetMenu) {
-          if (!parsedData[targetPlatform.id]) parsedData[targetPlatform.id] = [];
-          parsedData[targetPlatform.id].push({ date: csvDate, menuId: targetMenu.id, qty: Number(csvQty), price: Number(csvPrice) });
-        }
+  const getPName = (id: string) => platforms.find(p => p.id === id)?.name || id;
+  const getMName = (id: string) => menuItems.find(m => m.id === id)?.name || id;
+
+  const addToQueue = () => {
+    const targetPlatform = platforms.find(p => p.id === platform);
+    if (!targetPlatform) return;
+
+    // Explicitly cast unknown object to expected shape
+    const newRecords: SaleRecord[] = Object.entries(formData)
+      .filter(([_, v]) => Number((v as { qty: string }).qty) > 0)
+      .map(([id, v]) => {
+        const val = v as { qty: string, price: string };
+        const totalPrice = Number(val.price) || 0;
+        const totalFeePercent = (targetPlatform.feePercent || 0) + (targetPlatform.adjustmentPercent || 0);
+        const commission = totalPrice * (totalFeePercent / 100);
+        const settlementAmount = totalPrice - commission;
+        const targetDate = new Date(date);
+        const now = new Date();
+        targetDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+
+        return {
+          id: crypto.randomUUID(),
+          date: targetDate.toISOString(),
+          platformId: platform,
+          menuId: id,
+          quantity: Number(val.qty),
+          totalPrice,
+          settlementAmount,
+          netProfit: settlementAmount,
+        };
       });
-      let addedCount = 0;
-      Object.entries(parsedData).forEach(([pId, list]) => { onBulkAddSales(pId, list); addedCount += list.length; });
-      if (addedCount > 0) alert(`${addedCount}건의 판매 실적이 등록되었습니다.`);
-      else alert('매칭되는 정보가 없습니다. 파일 양식을 확인해주세요.');
-    };
-    reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+
+    if (newRecords.length === 0) return;
+    setTempQueue(prev => [...prev, ...newRecords]);
+    setFormData({});
   };
 
-  const downloadSampleCsv = () => {
-    const header = "날짜,플랫폼명,메뉴명,수량,총결제액\n";
-    const sample = `${new Date().toISOString().split('T')[0]},${platforms[0]?.name || '배민'},${menuItems[0]?.name || '메뉴명'},1,15000`;
-    const blob = new Blob(["\uFEFF" + header + sample], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = '경희장부_양식.csv';
-    link.click();
+  const removeFromQueue = (id: string) => {
+    setTempQueue(prev => prev.filter(r => r.id !== id));
+  };
+
+  const submitFinal = () => {
+    if (tempQueue.length === 0) return;
+    setIsFinishing(true);
+    setTimeout(() => {
+      onFinalSubmit(tempQueue);
+      setTempQueue([]);
+      setIsFinishing(false);
+      alert('정산 마감이 완료되었습니다! 장부에 기록되었습니다.');
+    }, 800);
+  };
+
+  const saveMemo = () => {
+    onSaveMemo(date, memoContent);
+    setMemoSaved(true);
+    setTimeout(() => setMemoSaved(false), 2000);
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 duration-700">
+    <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-700 pb-20">
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-black">판매 실적 입력</h2>
         <div className="flex gap-2">
-          <button onClick={downloadSampleCsv} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold transition-all">양식</button>
-          <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-[#448AFF] hover:bg-blue-600 rounded-xl text-xs font-bold text-white shadow-lg transition-all">업로드</button>
-          <input type="file" ref={fileInputRef} accept=".csv" onChange={handleCsvUpload} className="hidden" />
+          <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold transition-all">Excel 업로드</button>
+          <input type="file" ref={fileInputRef} accept=".csv" className="hidden" />
         </div>
       </div>
       
-      <div className="apple-card p-6 md:p-8 space-y-8">
+      {/* 1단계: 입력 폼 */}
+      <div className="apple-card p-6 md:p-8 space-y-8 border-t-4 border-[#448AFF]">
         <div className="flex justify-between items-center">
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">날짜 선택</p>
+          <div className="space-y-1">
+            <p className="text-[10px] font-black text-[#448AFF] uppercase tracking-widest">STEP 1. 정보 입력</p>
+            <h3 className="text-lg font-black">플랫폼별 실적 기입</h3>
+          </div>
           <input type="date" value={date} onChange={e=>setDate(e.target.value)} className={`text-sm font-bold p-3 rounded-2xl outline-none border-none ${darkMode ? 'bg-[#2C2C2E]' : 'bg-gray-100'}`} />
         </div>
 
         <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
           {platforms.map(p => (
-            <button key={p.id} onClick={()=>setPlatform(p.id)} className={`flex-none px-6 py-3 rounded-2xl font-black text-xs transition-all duration-300 ${platform === p.id ? 'bg-[#448AFF] text-white shadow-lg active-tab-glow' : darkMode ? 'bg-[#2C2C2E] text-gray-500' : 'bg-gray-100 text-gray-400'}`}>{p.name}</button>
+            <button key={p.id} onClick={()=>setPlatform(p.id)} className={`flex-none px-6 py-3 rounded-2xl font-black text-xs transition-all duration-300 ${platform === p.id ? 'bg-[#448AFF] text-white shadow-lg' : darkMode ? 'bg-[#2C2C2E] text-gray-500' : 'bg-gray-100 text-gray-400'}`}>{p.name}</button>
           ))}
         </div>
 
-        <div className="space-y-4 max-h-[380px] overflow-y-auto no-scrollbar pr-1">
+        <div className="space-y-4 max-h-[300px] overflow-y-auto no-scrollbar pr-1">
           {menuItems.map(m => (
-            <div key={m.id} className={`grid grid-cols-12 gap-3 items-center p-4 rounded-3xl transition-all ${darkMode ? 'bg-[#2C2C2E]/50 hover:bg-[#2C2C2E]' : 'bg-gray-50 hover:bg-gray-100'}`}>
+            <div key={m.id} className={`grid grid-cols-12 gap-3 items-center p-4 rounded-3xl transition-all ${darkMode ? 'bg-[#2C2C2E]/30 hover:bg-[#2C2C2E]' : 'bg-gray-50 hover:bg-gray-100'}`}>
               <div className="col-span-4 text-sm font-bold truncate">{m.name}</div>
-              <input type="number" inputMode="numeric" placeholder="0" value={data[m.id]?.qty||''} onChange={e=>setData({...data,[m.id]:{...data[m.id],qty:e.target.value}})} className={`col-span-3 p-3 rounded-2xl border-none font-black text-center text-sm ${darkMode ? 'bg-[#1C1C1E]' : 'bg-white shadow-sm'}`} />
+              <input type="number" inputMode="numeric" placeholder="수량" value={formData[m.id]?.qty||''} onChange={e=>setFormData({...formData,[m.id]:{...formData[m.id],qty:e.target.value}})} className={`col-span-3 p-3 rounded-2xl border-none font-black text-center text-sm ${darkMode ? 'bg-[#1C1C1E]' : 'bg-white shadow-sm'}`} />
               <div className="col-span-5 relative">
-                <input type="number" inputMode="numeric" placeholder="0" value={data[m.id]?.price||''} onChange={e=>setData({...data,[m.id]:{...data[m.id],price:e.target.value}})} className={`w-full p-3 rounded-2xl border-none font-black text-right text-sm pr-7 ${darkMode ? 'bg-[#1C1C1E]' : 'bg-white shadow-sm'}`} />
+                <input type="number" inputMode="numeric" placeholder="총액" value={formData[m.id]?.price||''} onChange={e=>setFormData({...formData,[m.id]:{...formData[m.id],price:e.target.value}})} className={`w-full p-3 rounded-2xl border-none font-black text-right text-sm pr-7 ${darkMode ? 'bg-[#1C1C1E]' : 'bg-white shadow-sm'}`} />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-500">₩</span>
               </div>
             </div>
           ))}
         </div>
-        <button onClick={save} className="w-full py-5 bg-[#448AFF] hover:bg-blue-600 text-white rounded-3xl font-black text-lg shadow-xl shadow-blue-500/20 active:scale-95 transition-all">실적 저장 {msg && '✓'}</button>
+        <button onClick={addToQueue} className={`w-full py-4 rounded-3xl font-black text-sm transition-all ${platform ? 'bg-white/10 hover:bg-white/20' : 'opacity-30 cursor-not-allowed'}`}>
+          <i className="fas fa-plus mr-2"></i> 확인용 목록에 추가
+        </button>
+      </div>
+
+      {/* 2단계: 확인용 목록 */}
+      <div className="apple-card p-6 md:p-8 space-y-6 border-t-4 border-[#B9F6CA]">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-[#B9F6CA] uppercase tracking-widest">STEP 2. 정산 대기 목록</p>
+          <h3 className="text-lg font-black">오늘의 정산 내역 확인</h3>
+        </div>
+
+        {tempQueue.length > 0 ? (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {tempQueue.map(r => (
+                <div key={r.id} className={`flex justify-between items-center p-4 rounded-2xl ${darkMode ? 'bg-[#2C2C2E]/60' : 'bg-gray-50'}`}>
+                  <div className="flex gap-4 items-center">
+                    <span className="text-[10px] font-black px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400">{getPName(r.platformId)}</span>
+                    <span className="text-sm font-bold">{getMName(r.menuId)}</span>
+                    <span className="text-xs text-gray-500">x{r.quantity}</span>
+                  </div>
+                  <div className="flex gap-4 items-center">
+                    <span className="text-sm font-black">{r.totalPrice.toLocaleString()}원</span>
+                    <button onClick={() => removeFromQueue(r.id)} className="text-gray-600 hover:text-rose-500"><i className="fas fa-times"></i></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="p-6 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl text-white shadow-xl shadow-emerald-500/20">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-xs font-bold opacity-80 uppercase">마감 합계</span>
+                <span className="text-2xl font-black">{tempQueue.reduce((acc, r) => acc + r.totalPrice, 0).toLocaleString()}원</span>
+              </div>
+              <button 
+                onClick={submitFinal} 
+                disabled={isFinishing}
+                className={`w-full py-4 bg-white text-emerald-600 rounded-2xl font-black text-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${isFinishing ? 'animate-pulse' : ''}`}
+              >
+                {isFinishing ? (
+                  <i className="fas fa-circle-notch animate-spin"></i>
+                ) : (
+                  <>
+                    <i className="fas fa-check-double"></i>
+                    오늘의 정산 마감하기
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="py-12 text-center">
+            <p className="text-sm font-bold text-gray-600">위에서 입력 후 '목록에 추가'를 눌러주세요.</p>
+          </div>
+        )}
+      </div>
+
+      {/* 3단계: 일별 메모 섹션 */}
+      <div className="apple-card p-6 md:p-8 space-y-4 border-t-4 border-amber-400">
+        <div className="flex justify-between items-center">
+          <div className="space-y-1">
+            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">STEP 3. 일별 메모</p>
+            <h3 className="text-lg font-black">오늘의 특이사항</h3>
+          </div>
+          <button 
+            onClick={saveMemo}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${memoSaved ? 'bg-emerald-500 text-white' : 'bg-amber-400/10 text-amber-500 hover:bg-amber-400/20'}`}
+          >
+            {memoSaved ? '저장됨 ✓' : '메모 저장'}
+          </button>
+        </div>
+        <textarea 
+          placeholder="날씨, 손님 반응, 재료 소진 등 오늘의 경영 일지를 기록하세요..."
+          value={memoContent}
+          onChange={(e) => setMemoContent(e.target.value)}
+          className={`w-full h-32 p-5 rounded-3xl font-medium text-sm outline-none resize-none transition-all leading-relaxed ${darkMode ? 'bg-[#1C1C1E] text-gray-300 placeholder-gray-700' : 'bg-gray-50 text-gray-800 placeholder-gray-400 focus:bg-white focus:ring-2 ring-amber-100'}`}
+        />
       </div>
     </div>
   );
