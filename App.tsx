@@ -142,7 +142,7 @@ const App: React.FC = () => {
         </div>
         <NavItem active={view === 'dashboard'} onClick={() => setView('dashboard')} icon="fa-chart-pie" label="홈" darkMode={darkMode} />
         <NavItem active={view === 'sales'} onClick={() => setView('sales')} icon="fa-plus-circle" label="판매입력" darkMode={darkMode} />
-        <NavItem active={view === 'stats'} onClick={() => setView('stats'} icon="fa-magnifying-glass-chart" label="심층분석" darkMode={darkMode} />
+        <NavItem active={view === 'stats'} onClick={() => setView('stats')} icon="fa-magnifying-glass-chart" label="심층분석" darkMode={darkMode} />
         <NavItem active={view === 'settings'} onClick={() => setView('settings')} icon="fa-sliders" label="설정" darkMode={darkMode} />
       </nav>
 
@@ -265,7 +265,6 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
           />
         </div>
 
-        {/* 메모 조회 섹션 */}
         {currentMemo && (
           <div className={`p-6 rounded-3xl border-l-4 border-amber-400 ${darkMode ? 'bg-amber-400/5' : 'bg-amber-50'}`}>
             <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2"><i className="fas fa-sticky-note mr-1"></i> 당일 특이사항</p>
@@ -366,11 +365,10 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
     const targetPlatform = platforms.find(p => p.id === platform);
     if (!targetPlatform) return;
 
-    // Explicitly cast unknown object to expected shape
     const newRecords: SaleRecord[] = Object.entries(formData)
-      .filter(([_, v]) => Number((v as { qty: string }).qty) > 0)
+      .filter(([_, v]) => Number((v as any).qty) > 0)
       .map(([id, v]) => {
-        const val = v as { qty: string, price: string };
+        const val = v as any;
         const totalPrice = Number(val.price) || 0;
         const totalFeePercent = (targetPlatform.feePercent || 0) + (targetPlatform.adjustmentPercent || 0);
         const commission = totalPrice * (totalFeePercent / 100);
@@ -427,7 +425,6 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
         </div>
       </div>
       
-      {/* 1단계: 입력 폼 */}
       <div className="apple-card p-6 md:p-8 space-y-8 border-t-4 border-[#448AFF]">
         <div className="flex justify-between items-center">
           <div className="space-y-1">
@@ -460,7 +457,6 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
         </button>
       </div>
 
-      {/* 2단계: 확인용 목록 */}
       <div className="apple-card p-6 md:p-8 space-y-6 border-t-4 border-[#B9F6CA]">
         <div className="space-y-1">
           <p className="text-[10px] font-black text-[#B9F6CA] uppercase tracking-widest">STEP 2. 정산 대기 목록</p>
@@ -513,7 +509,6 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
         )}
       </div>
 
-      {/* 3단계: 일별 메모 섹션 */}
       <div className="apple-card p-6 md:p-8 space-y-4 border-t-4 border-amber-400">
         <div className="flex justify-between items-center">
           <div className="space-y-1">
