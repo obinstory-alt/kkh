@@ -2,14 +2,14 @@
 export interface MenuItem {
   id: string;
   name: string;
-  costPercent: number; // 메뉴 개별 원가율 (%) - 현재는 전체 적용 위주
+  costPercent: number;
 }
 
 export interface PlatformConfig {
   id: string;
   name: string;
-  feePercent: number; // 중개 수수료 (%)
-  adjustmentPercent: number; // 조정 수수료 (%)
+  feePercent: number;
+  adjustmentPercent: number;
 }
 
 export interface SaleRecord {
@@ -26,6 +26,11 @@ export interface SaleRecord {
 export interface ExpenseItem {
   id: string;
   name: string;
-  type: 'fixed' | 'percent'; // 고정비(fixed) 또는 매출대비%(percent)
-  value: number; // 금액(원) 또는 비율(%)
+  type: 'fixed' | 'percent';
+  value: number;
+}
+
+export interface DailyMemo {
+  date: string; // YYYY-MM-DD
+  content: string;
 }
