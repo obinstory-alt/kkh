@@ -415,13 +415,86 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
     setTimeout(() => setMemoSaved(false), 2000);
   };
 
+  const downloadTemplate = () => {
+    const header = "플랫폼,메뉴,수량,총액\n";
+    const example = `${platforms[0]?.name || '배민'},${menuItems[0]?.name || '메뉴명'},1,15000\n`;
+    const blob = new Blob(["\uFEFF" + header + example], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', '경희장부_판매양식.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const lines = text.split('\n').filter(l => l.trim() !== '');
+      const newRecords: SaleRecord[] = [];
+
+      // Skip header
+      for (let i = 1; i < lines.length; i++) {
+        const [pName, mName, qty, price] = lines[i].split(',').map(s => s.trim());
+        const platformObj = platforms.find(p => p.name === pName);
+        const menuObj = menuItems.find(m => m.name === mName);
+
+        if (platformObj && menuObj && Number(qty) > 0) {
+          const totalPrice = Number(price) || 0;
+          const totalFeePercent = (platformObj.feePercent || 0) + (platformObj.adjustmentPercent || 0);
+          const commission = totalPrice * (totalFeePercent / 100);
+          const settlementAmount = totalPrice - commission;
+          const targetDate = new Date(date);
+          const now = new Date();
+          targetDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+
+          newRecords.push({
+            id: crypto.randomUUID(),
+            date: targetDate.toISOString(),
+            platformId: platformObj.id,
+            menuId: menuObj.id,
+            quantity: Number(qty),
+            totalPrice,
+            settlementAmount,
+            netProfit: settlementAmount,
+          });
+        }
+      }
+
+      if (newRecords.length > 0) {
+        setTempQueue(prev => [...prev, ...newRecords]);
+        alert(`${newRecords.length}개의 내역을 대기 목록에 추가했습니다. 확인 후 정산 마감을 눌러주세요.`);
+      } else {
+        alert('인식된 데이터가 없습니다. 플랫폼명과 메뉴명이 정확한지 확인해주세요.');
+      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-700 pb-20">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-3xl font-black">판매 실적 입력</h2>
-        <div className="flex gap-2">
-          <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold transition-all">Excel 업로드</button>
-          <input type="file" ref={fileInputRef} accept=".csv" className="hidden" />
+        <div className="flex flex-wrap gap-2">
+          <button 
+            onClick={downloadTemplate} 
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${darkMode ? 'bg-amber-400/10 text-amber-500 hover:bg-amber-400/20' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
+          >
+            <i className="fas fa-file-download"></i> 양식 다운로드
+          </button>
+          <button 
+            onClick={() => fileInputRef.current?.click()} 
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-100 hover:bg-gray-200'}`}
+          >
+            <i className="fas fa-file-excel"></i> 엑셀 업로드
+          </button>
+          <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".csv" className="hidden" />
         </div>
       </div>
       
