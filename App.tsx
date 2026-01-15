@@ -24,7 +24,10 @@ const App: React.FC = () => {
     SALES: 'biz_total_v17_sales',
     EXPENSES: 'biz_total_v17_expenses',
     MEMOS: 'biz_total_v17_memos',
-    THEME: 'biz_total_v17_theme'
+    THEME: 'biz_total_v17_theme',
+    TEMP_FORM: 'biz_total_v17_temp_form',
+    TEMP_QUEUE: 'biz_total_v17_temp_queue',
+    TEMP_MEMO: 'biz_total_v17_temp_memo'
   };
 
   const [view, setView] = useState<'dashboard' | 'sales' | 'stats' | 'settings'>('dashboard');
@@ -35,7 +38,7 @@ const App: React.FC = () => {
   const [memos, setMemos] = useState<DailyMemo[]>([]);
   
   const [darkMode, setDarkMode] = useState<boolean>(() => {
-    const savedTheme = localStorage.getItem('biz_total_v17_theme');
+    const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
     return savedTheme !== 'light';
   });
 
@@ -148,7 +151,7 @@ const App: React.FC = () => {
 
       <main className="p-4 md:p-8 max-w-6xl mx-auto">
         {view === 'dashboard' && <Dashboard stats={statsSummary} darkMode={darkMode} />}
-        {view === 'sales' && <SalesBulkInput menuItems={menuItems} platforms={platforms} memos={memos} onFinalSubmit={handleBulkAddSales} onSaveMemo={handleSaveMemo} darkMode={darkMode} />}
+        {view === 'sales' && <SalesBulkInput menuItems={menuItems} platforms={platforms} memos={memos} onFinalSubmit={handleBulkAddSales} onSaveMemo={handleSaveMemo} darkMode={darkMode} storageKeys={STORAGE_KEYS} />}
         {view === 'stats' && <AdvancedStats sales={sales} expenses={expenses} menuItems={menuItems} platforms={platforms} memos={memos} setSales={setSales} darkMode={darkMode} />}
         {view === 'settings' && <Settings menuItems={menuItems} setMenuItems={setMenuItems} platforms={platforms} setPlatforms={setPlatforms} expenses={expenses} setExpenses={setExpenses} darkMode={darkMode} setDarkMode={setDarkMode} onBackup={handleBackup} onRestore={handleRestore} />}
       </main>
@@ -343,19 +346,48 @@ const StatCard: React.FC<{ label: string; value: number; color: string; darkMode
   </div>
 );
 
-const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig[], memos: DailyMemo[], onFinalSubmit: (records: SaleRecord[]) => void, onSaveMemo: (date: string, content: string) => void, darkMode: boolean }> = ({ menuItems, platforms, memos, onFinalSubmit, onSaveMemo, darkMode }) => {
+const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig[], memos: DailyMemo[], onFinalSubmit: (records: SaleRecord[]) => void, onSaveMemo: (date: string, content: string) => void, darkMode: boolean, storageKeys: any }> = ({ menuItems, platforms, memos, onFinalSubmit, onSaveMemo, darkMode, storageKeys }) => {
   const [platform, setPlatform] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [formData, setFormData] = useState<Record<string, { qty: string, price: string }>>({});
-  const [tempQueue, setTempQueue] = useState<SaleRecord[]>([]);
-  const [memoContent, setMemoContent] = useState('');
+  
+  // 임시 데이터 상태 - 초기값을 로컬 스토리지에서 불러옴
+  const [formData, setFormData] = useState<Record<string, { qty: string, price: string }>>(() => {
+    const saved = localStorage.getItem(storageKeys.TEMP_FORM);
+    return saved ? JSON.parse(saved) : {};
+  });
+  
+  const [tempQueue, setTempQueue] = useState<SaleRecord[]>(() => {
+    const saved = localStorage.getItem(storageKeys.TEMP_QUEUE);
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  const [memoContent, setMemoContent] = useState(() => {
+    return localStorage.getItem(storageKeys.TEMP_MEMO) || '';
+  });
+
   const [isFinishing, setIsFinishing] = useState(false);
   const [memoSaved, setMemoSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 데이터 변경 시 실시간 로컬 스토리지 백업
+  useEffect(() => {
+    localStorage.setItem(storageKeys.TEMP_FORM, JSON.stringify(formData));
+  }, [formData]);
+
+  useEffect(() => {
+    localStorage.setItem(storageKeys.TEMP_QUEUE, JSON.stringify(tempQueue));
+  }, [tempQueue]);
+
+  useEffect(() => {
+    localStorage.setItem(storageKeys.TEMP_MEMO, memoContent);
+  }, [memoContent]);
+
+  // 날짜가 바뀔 때 이미 저장된 공식 메모가 있으면 불러오기 (임시 메모보다 우선순위)
   useEffect(() => {
     const existingMemo = memos.find(m => m.date === date);
-    setMemoContent(existingMemo ? existingMemo.content : '');
+    if (existingMemo) {
+      setMemoContent(existingMemo.content);
+    }
   }, [date, memos]);
 
   const getPName = (id: string) => platforms.find(p => p.id === id)?.name || id;
@@ -398,12 +430,27 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
     setTempQueue(prev => prev.filter(r => r.id !== id));
   };
 
+  const clearAllTempData = () => {
+    if (confirm('입력 중인 모든 데이터를 초기화하시겠습니까?')) {
+      setFormData({});
+      setTempQueue([]);
+      setMemoContent('');
+      localStorage.removeItem(storageKeys.TEMP_FORM);
+      localStorage.removeItem(storageKeys.TEMP_QUEUE);
+      localStorage.removeItem(storageKeys.TEMP_MEMO);
+    }
+  };
+
   const submitFinal = () => {
     if (tempQueue.length === 0) return;
     setIsFinishing(true);
     setTimeout(() => {
       onFinalSubmit(tempQueue);
+      // 마감 성공 시 임시 데이터 삭제
       setTempQueue([]);
+      setFormData({});
+      localStorage.removeItem(storageKeys.TEMP_FORM);
+      localStorage.removeItem(storageKeys.TEMP_QUEUE);
       setIsFinishing(false);
       alert('정산 마감이 완료되었습니다! 장부에 기록되었습니다.');
     }, 800);
@@ -412,6 +459,8 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
   const saveMemo = () => {
     onSaveMemo(date, memoContent);
     setMemoSaved(true);
+    // 저장된 메모는 임시 메모 스토리지에서도 비워줌 (이미 공식 데이터가 됨)
+    localStorage.removeItem(storageKeys.TEMP_MEMO);
     setTimeout(() => setMemoSaved(false), 2000);
   };
 
@@ -438,7 +487,6 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
       const lines = text.split('\n').filter(l => l.trim() !== '');
       const newRecords: SaleRecord[] = [];
 
-      // Skip header
       for (let i = 1; i < lines.length; i++) {
         const [pName, mName, qty, price] = lines[i].split(',').map(s => s.trim());
         const platformObj = platforms.find(p => p.name === pName);
@@ -483,10 +531,16 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
         <h2 className="text-3xl font-black">판매 실적 입력</h2>
         <div className="flex flex-wrap gap-2">
           <button 
+            onClick={clearAllTempData} 
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
+          >
+            <i className="fas fa-trash-arrow-up"></i> 전체 초기화
+          </button>
+          <button 
             onClick={downloadTemplate} 
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${darkMode ? 'bg-amber-400/10 text-amber-500 hover:bg-amber-400/20' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
           >
-            <i className="fas fa-file-download"></i> 양식 다운로드
+            <i className="fas fa-file-download"></i> 양식
           </button>
           <button 
             onClick={() => fileInputRef.current?.click()} 
@@ -498,10 +552,11 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
         </div>
       </div>
       
+      {/* STEP 1: 입력 폼 */}
       <div className="apple-card p-6 md:p-8 space-y-8 border-t-4 border-[#448AFF]">
         <div className="flex justify-between items-center">
           <div className="space-y-1">
-            <p className="text-[10px] font-black text-[#448AFF] uppercase tracking-widest">STEP 1. 정보 입력</p>
+            <p className="text-[10px] font-black text-[#448AFF] uppercase tracking-widest">STEP 1. 정보 입력 <span className="ml-2 text-emerald-500">● 실시간 자동저장 중</span></p>
             <h3 className="text-lg font-black">플랫폼별 실적 기입</h3>
           </div>
           <input type="date" value={date} onChange={e=>setDate(e.target.value)} className={`text-sm font-bold p-3 rounded-2xl outline-none border-none ${darkMode ? 'bg-[#2C2C2E]' : 'bg-gray-100'}`} />
@@ -530,9 +585,10 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
         </button>
       </div>
 
+      {/* STEP 2: 대기 목록 */}
       <div className="apple-card p-6 md:p-8 space-y-6 border-t-4 border-[#B9F6CA]">
         <div className="space-y-1">
-          <p className="text-[10px] font-black text-[#B9F6CA] uppercase tracking-widest">STEP 2. 정산 대기 목록</p>
+          <p className="text-[10px] font-black text-[#B9F6CA] uppercase tracking-widest">STEP 2. 정산 대기 목록 <span className="ml-2 text-emerald-500">● 안전하게 보관됨</span></p>
           <h3 className="text-lg font-black">오늘의 정산 내역 확인</h3>
         </div>
 
@@ -582,6 +638,7 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
         )}
       </div>
 
+      {/* STEP 3: 메모 */}
       <div className="apple-card p-6 md:p-8 space-y-4 border-t-4 border-amber-400">
         <div className="flex justify-between items-center">
           <div className="space-y-1">
