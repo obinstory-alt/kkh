@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
 import { MenuItem, PlatformConfig, SaleRecord, ExpenseItem, DailyMemo } from './types';
 
 const DEFAULT_PLATFORMS: PlatformConfig[] = [
@@ -145,7 +145,7 @@ const App: React.FC = () => {
         </div>
         <NavItem active={view === 'dashboard'} onClick={() => setView('dashboard')} icon="fa-chart-pie" label="홈" darkMode={darkMode} />
         <NavItem active={view === 'sales'} onClick={() => setView('sales')} icon="fa-plus-circle" label="판매입력" darkMode={darkMode} />
-        <NavItem active={view === 'stats'} onClick={() => setView('stats')} icon="fa-magnifying-glass-chart" label="심층분석" darkMode={darkMode} />
+        <NavItem active={view === 'stats'} onClick={() => setView('stats'} icon="fa-magnifying-glass-chart" label="심층분석" darkMode={darkMode} />
         <NavItem active={view === 'settings'} onClick={() => setView('settings')} icon="fa-sliders" label="설정" darkMode={darkMode} />
       </nav>
 
@@ -207,7 +207,7 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
 );
 
 const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], menuItems: MenuItem[], platforms: PlatformConfig[], memos: DailyMemo[], setSales: any, darkMode: boolean }> = ({ sales, expenses, menuItems, platforms, memos, setSales, darkMode }) => {
-  const [timeUnit, setTimeUnit] = useState<'daily' | 'monthly' | 'yearly'>('daily');
+  const [timeUnit, setTimeUnit] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [searchDate, setSearchDate] = useState(new Date().toISOString().split('T')[0]);
 
   const getPName = (id: string) => platforms.find(p => p.id === id)?.name || id;
@@ -222,6 +222,7 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
     return { revenue, settlement };
   }, [filteredSales]);
 
+  // 기간별 집계 로직 (주간 추가)
   const aggregated = useMemo(() => {
     const map: Record<string, { label: string, revenue: number, settlement: number, profit: number }> = {};
     const fixed = expenses.filter(e => e.type === 'fixed').reduce((acc, curr) => acc + curr.value, 0);
@@ -230,28 +231,55 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
     sales.forEach(s => {
       const d = new Date(s.date);
       let key = ''; let label = '';
-      if (timeUnit === 'daily') { key = s.date.split('T')[0]; label = key.slice(5); }
-      else if (timeUnit === 'monthly') { key = `${d.getFullYear()}-${d.getMonth()+1}`; label = `${d.getMonth()+1}월`; }
-      else { key = `${d.getFullYear()}`; label = `${key}년`; }
+      if (timeUnit === 'daily') { 
+        key = s.date.split('T')[0]; 
+        label = key.slice(5); 
+      } else if (timeUnit === 'weekly') {
+        const firstDayOfYear = new Date(d.getFullYear(), 0, 1);
+        const pastDaysOfYear = (d.getTime() - firstDayOfYear.getTime()) / 86400000;
+        const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+        key = `${d.getFullYear()}-W${weekNum}`;
+        label = `${weekNum}주차`;
+      } else if (timeUnit === 'monthly') { 
+        key = `${d.getFullYear()}-${d.getMonth()+1}`; 
+        label = `${d.getMonth()+1}월`; 
+      } else { 
+        key = `${d.getFullYear()}`; 
+        label = `${key}년`; 
+      }
       if (!map[key]) map[key] = { label, revenue: 0, settlement: 0, profit: 0 };
       map[key].revenue += s.totalPrice;
       map[key].settlement += s.settlementAmount;
     });
 
     return Object.entries(map).sort(([a],[b]) => a.localeCompare(b)).map(([_, v]) => {
-      let fCost = timeUnit === 'daily' ? fixed/30 : timeUnit === 'monthly' ? fixed : fixed*12;
+      let fCost = timeUnit === 'daily' ? fixed/30 : timeUnit === 'weekly' ? fixed/4 : timeUnit === 'monthly' ? fixed : fixed*12;
       return { ...v, profit: v.settlement - (v.revenue * vRate) - fCost };
-    }).slice(timeUnit === 'daily' ? -14 : -6);
+    }).slice(timeUnit === 'daily' ? -14 : -10);
   }, [sales, expenses, timeUnit]);
+
+  // 메뉴별 분석 데이터 (모든 기간 합산용 또는 선택 기간용)
+  const menuRanking = useMemo(() => {
+    const map: Record<string, { name: string, qty: number, revenue: number }> = {};
+    const targetSales = timeUnit === 'daily' ? filteredSales : sales; // 일간일때는 선택날짜, 나머지는 전체 데이터(샘플링)
+    
+    targetSales.forEach(s => {
+      if (!map[s.menuId]) map[s.menuId] = { name: getMName(s.menuId), qty: 0, revenue: 0 };
+      map[s.menuId].qty += s.quantity;
+      map[s.menuId].revenue += s.totalPrice;
+    });
+
+    return Object.values(map).sort((a, b) => b.revenue - a.revenue);
+  }, [sales, filteredSales, timeUnit, menuItems]);
 
   return (
     <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <h2 className="text-3xl font-black">심층 분석</h2>
         <div className={`flex p-1.5 rounded-2xl ${darkMode ? 'bg-[#1C1C1E]' : 'bg-gray-200'}`}>
-          {(['daily', 'monthly', 'yearly'] as const).map(u => (
-            <button key={u} onClick={() => setTimeUnit(u)} className={`px-5 py-2 rounded-xl text-xs font-bold transition-all ${timeUnit === u ? 'bg-[#448AFF] text-white shadow-md' : 'text-gray-500'}`}>
-              {u === 'daily' ? '일간' : u === 'monthly' ? '월간' : '연간'}
+          {(['daily', 'weekly', 'monthly', 'yearly'] as const).map(u => (
+            <button key={u} onClick={() => setTimeUnit(u)} className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all ${timeUnit === u ? 'bg-[#448AFF] text-white shadow-md' : 'text-gray-500'}`}>
+              {u === 'daily' ? '일간' : u === 'weekly' ? '주간' : u === 'monthly' ? '월간' : '연간'}
             </button>
           ))}
         </div>
@@ -259,7 +287,7 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
 
       <div className="apple-card p-6 md:p-8 space-y-8">
         <div className="flex justify-between items-center">
-          <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">날짜별 조회</h3>
+          <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">조회 및 메모</h3>
           <input 
             type="date" 
             value={searchDate} 
@@ -287,52 +315,55 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
                 <p className="text-xl font-black text-[#B9F6CA]">{searchSummary.settlement.toLocaleString()}원</p>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-[10px] font-black text-gray-500 uppercase border-b border-white/5">
-                    <th className="py-3">플랫폼</th>
-                    <th className="py-3">메뉴</th>
-                    <th className="py-3 text-right">매출</th>
-                    <th className="py-3 text-center">관리</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {filteredSales.map(s => (
-                    <tr key={s.id} className="group transition-colors hover:bg-white/5">
-                      <td className="py-4 font-bold text-blue-400">{getPName(s.platformId)}</td>
-                      <td className="py-4 font-medium text-sm">{getMName(s.menuId)} <span className="text-gray-500 ml-1">x{s.quantity}</span></td>
-                      <td className="py-4 font-black text-right text-sm">{s.totalPrice.toLocaleString()}원</td>
-                      <td className="py-4 text-center">
-                        <button onClick={() => setSales(sales.filter((i: any) => i.id !== s.id))} className="text-gray-600 hover:text-rose-500 transition-colors"><i className="fas fa-trash-alt"></i></button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </div>
         ) : (
-          <div className="py-20 text-center">
-            <i className="fas fa-search text-5xl text-gray-800 mb-4"></i>
-            <p className="text-sm font-bold text-gray-500">입력된 매출 정보가 없습니다.</p>
+          <div className="py-10 text-center">
+            <p className="text-sm font-bold text-gray-500">조회된 날짜의 매출 데이터가 없습니다.</p>
           </div>
         )}
       </div>
 
-      <div className="apple-card p-6 md:p-8">
-        <h3 className="text-xs font-black mb-8 uppercase tracking-widest text-gray-500">수익성 흐름</h3>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={aggregated} barGap={8}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"} />
-              <XAxis dataKey="label" fontSize={11} axisLine={false} tickLine={false} tick={{fill: '#8e8e93'}} />
-              <Tooltip cursor={{fill: 'rgba(255,255,255,0.03)'}} contentStyle={{borderRadius: '16px', border: 'none', backgroundColor: darkMode ? '#2C2C2E' : '#fff'}} formatter={(v: any) => `${Math.round(v).toLocaleString()}원`} />
-              <Legend verticalAlign="top" height={40} iconType="circle" />
-              <Bar dataKey="revenue" name="총 매출" fill="#448AFF" radius={[6, 6, 0, 0]} barSize={16} />
-              <Bar dataKey="profit" name="순이익" fill="#B9F6CA" radius={[6, 6, 0, 0]} barSize={16} />
-            </BarChart>
-          </ResponsiveContainer>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="apple-card p-6 md:p-8">
+          <h3 className="text-xs font-black mb-8 uppercase tracking-widest text-gray-500">수익성 흐름 ({timeUnit})</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={aggregated}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"} />
+                <XAxis dataKey="label" fontSize={11} axisLine={false} tickLine={false} tick={{fill: '#8e8e93'}} />
+                <Tooltip cursor={{fill: 'rgba(255,255,255,0.03)'}} contentStyle={{borderRadius: '16px', border: 'none', backgroundColor: darkMode ? '#2C2C2E' : '#fff'}} formatter={(v: any) => `${Math.round(v).toLocaleString()}원`} />
+                <Bar dataKey="revenue" name="매출" fill="#448AFF" radius={[4, 4, 0, 0]} barSize={12} />
+                <Bar dataKey="profit" name="순익" fill="#B9F6CA" radius={[4, 4, 0, 0]} barSize={12} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="apple-card p-6 md:p-8">
+          <h3 className="text-xs font-black mb-8 uppercase tracking-widest text-gray-500">메뉴별 판매 랭킹</h3>
+          <div className="space-y-4 max-h-[256px] overflow-y-auto no-scrollbar">
+            {menuRanking.map((m, idx) => (
+              <div key={idx} className="flex items-center gap-4">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${idx === 0 ? 'bg-amber-400 text-white' : darkMode ? 'bg-white/5 text-gray-500' : 'bg-gray-100 text-gray-400'}`}>
+                  {idx + 1}
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-bold">{m.name}</span>
+                    <span className="text-xs font-black">{m.revenue.toLocaleString()}원</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-200 dark:bg-white/5 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-500 rounded-full" 
+                      style={{ width: `${(m.revenue / menuRanking[0].revenue) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <div className="text-[10px] font-black text-gray-500 whitespace-nowrap">{m.qty}개</div>
+              </div>
+            ))}
+            {menuRanking.length === 0 && <p className="text-center py-10 text-xs text-gray-500">판매 기록이 없습니다.</p>}
+          </div>
         </div>
       </div>
     </div>
@@ -350,7 +381,6 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
   const [platform, setPlatform] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   
-  // 임시 데이터 상태 - 초기값을 로컬 스토리지에서 불러옴
   const [formData, setFormData] = useState<Record<string, { qty: string, price: string }>>(() => {
     const saved = localStorage.getItem(storageKeys.TEMP_FORM);
     return saved ? JSON.parse(saved) : {};
@@ -367,9 +397,9 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
 
   const [isFinishing, setIsFinishing] = useState(false);
   const [memoSaved, setMemoSaved] = useState(false);
+  const [lastFinishedReport, setLastFinishedReport] = useState<any[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 데이터 변경 시 실시간 로컬 스토리지 백업
   useEffect(() => {
     localStorage.setItem(storageKeys.TEMP_FORM, JSON.stringify(formData));
   }, [formData]);
@@ -382,12 +412,9 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
     localStorage.setItem(storageKeys.TEMP_MEMO, memoContent);
   }, [memoContent]);
 
-  // 날짜가 바뀔 때 이미 저장된 공식 메모가 있으면 불러오기 (임시 메모보다 우선순위)
   useEffect(() => {
     const existingMemo = memos.find(m => m.date === date);
-    if (existingMemo) {
-      setMemoContent(existingMemo.content);
-    }
+    if (existingMemo) setMemoContent(existingMemo.content);
   }, [date, memos]);
 
   const getPName = (id: string) => platforms.find(p => p.id === id)?.name || id;
@@ -435,6 +462,7 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
       setFormData({});
       setTempQueue([]);
       setMemoContent('');
+      setLastFinishedReport(null);
       localStorage.removeItem(storageKeys.TEMP_FORM);
       localStorage.removeItem(storageKeys.TEMP_QUEUE);
       localStorage.removeItem(storageKeys.TEMP_MEMO);
@@ -444,22 +472,30 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
   const submitFinal = () => {
     if (tempQueue.length === 0) return;
     setIsFinishing(true);
+    
+    // 메뉴별 합계 계산 (레포트용)
+    const menuMap: Record<string, { name: string, qty: number, total: number }> = {};
+    tempQueue.forEach(r => {
+      if (!menuMap[r.menuId]) menuMap[r.menuId] = { name: getMName(r.menuId), qty: 0, total: 0 };
+      menuMap[r.menuId].qty += r.quantity;
+      menuMap[r.menuId].total += r.totalPrice;
+    });
+
     setTimeout(() => {
       onFinalSubmit(tempQueue);
-      // 마감 성공 시 임시 데이터 삭제
+      setLastFinishedReport(Object.values(menuMap));
       setTempQueue([]);
       setFormData({});
       localStorage.removeItem(storageKeys.TEMP_FORM);
       localStorage.removeItem(storageKeys.TEMP_QUEUE);
       setIsFinishing(false);
-      alert('정산 마감이 완료되었습니다! 장부에 기록되었습니다.');
+      alert('정산 마감이 완료되었습니다! 메뉴별 합계를 확인하세요.');
     }, 800);
   };
 
   const saveMemo = () => {
     onSaveMemo(date, memoContent);
     setMemoSaved(true);
-    // 저장된 메모는 임시 메모 스토리지에서도 비워줌 (이미 공식 데이터가 됨)
     localStorage.removeItem(storageKeys.TEMP_MEMO);
     setTimeout(() => setMemoSaved(false), 2000);
   };
@@ -516,9 +552,9 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
 
       if (newRecords.length > 0) {
         setTempQueue(prev => [...prev, ...newRecords]);
-        alert(`${newRecords.length}개의 내역을 대기 목록에 추가했습니다. 확인 후 정산 마감을 눌러주세요.`);
+        alert(`${newRecords.length}개의 내역을 대기 목록에 추가했습니다.`);
       } else {
-        alert('인식된 데이터가 없습니다. 플랫폼명과 메뉴명이 정확한지 확인해주세요.');
+        alert('인식된 데이터가 없습니다.');
       }
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
@@ -530,24 +566,9 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-3xl font-black">판매 실적 입력</h2>
         <div className="flex flex-wrap gap-2">
-          <button 
-            onClick={clearAllTempData} 
-            className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
-          >
-            <i className="fas fa-trash-arrow-up"></i> 전체 초기화
-          </button>
-          <button 
-            onClick={downloadTemplate} 
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${darkMode ? 'bg-amber-400/10 text-amber-500 hover:bg-amber-400/20' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
-          >
-            <i className="fas fa-file-download"></i> 양식
-          </button>
-          <button 
-            onClick={() => fileInputRef.current?.click()} 
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-100 hover:bg-gray-200'}`}
-          >
-            <i className="fas fa-file-excel"></i> 엑셀 업로드
-          </button>
+          <button onClick={clearAllTempData} className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-rose-500/10 text-rose-500 hover:bg-rose-500/20">초기화</button>
+          <button onClick={downloadTemplate} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${darkMode ? 'bg-amber-400/10 text-amber-500 hover:bg-amber-400/20' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}>양식</button>
+          <button onClick={() => fileInputRef.current?.click()} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-100 hover:bg-gray-200'}`}><i className="fas fa-file-excel mr-1"></i> 업로드</button>
           <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".csv" className="hidden" />
         </div>
       </div>
@@ -556,7 +577,7 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
       <div className="apple-card p-6 md:p-8 space-y-8 border-t-4 border-[#448AFF]">
         <div className="flex justify-between items-center">
           <div className="space-y-1">
-            <p className="text-[10px] font-black text-[#448AFF] uppercase tracking-widest">STEP 1. 정보 입력 <span className="ml-2 text-emerald-500">● 실시간 자동저장 중</span></p>
+            <p className="text-[10px] font-black text-[#448AFF] uppercase tracking-widest">STEP 1. 정보 입력</p>
             <h3 className="text-lg font-black">플랫폼별 실적 기입</h3>
           </div>
           <input type="date" value={date} onChange={e=>setDate(e.target.value)} className={`text-sm font-bold p-3 rounded-2xl outline-none border-none ${darkMode ? 'bg-[#2C2C2E]' : 'bg-gray-100'}`} />
@@ -588,7 +609,7 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
       {/* STEP 2: 대기 목록 */}
       <div className="apple-card p-6 md:p-8 space-y-6 border-t-4 border-[#B9F6CA]">
         <div className="space-y-1">
-          <p className="text-[10px] font-black text-[#B9F6CA] uppercase tracking-widest">STEP 2. 정산 대기 목록 <span className="ml-2 text-emerald-500">● 안전하게 보관됨</span></p>
+          <p className="text-[10px] font-black text-[#B9F6CA] uppercase tracking-widest">STEP 2. 정산 대기 목록</p>
           <h3 className="text-lg font-black">오늘의 정산 내역 확인</h3>
         </div>
 
@@ -615,48 +636,56 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
                 <span className="text-xs font-bold opacity-80 uppercase">마감 합계</span>
                 <span className="text-2xl font-black">{tempQueue.reduce((acc, r) => acc + r.totalPrice, 0).toLocaleString()}원</span>
               </div>
-              <button 
-                onClick={submitFinal} 
-                disabled={isFinishing}
-                className={`w-full py-4 bg-white text-emerald-600 rounded-2xl font-black text-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${isFinishing ? 'animate-pulse' : ''}`}
-              >
-                {isFinishing ? (
-                  <i className="fas fa-circle-notch animate-spin"></i>
-                ) : (
-                  <>
-                    <i className="fas fa-check-double"></i>
-                    오늘의 정산 마감하기
-                  </>
-                )}
+              <button onClick={submitFinal} disabled={isFinishing} className="w-full py-4 bg-white text-emerald-600 rounded-2xl font-black text-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+                {isFinishing ? <i className="fas fa-circle-notch animate-spin"></i> : <><i className="fas fa-check-double"></i> 정산 마감하기</>}
               </button>
             </div>
           </div>
         ) : (
-          <div className="py-12 text-center">
-            <p className="text-sm font-bold text-gray-600">위에서 입력 후 '목록에 추가'를 눌러주세요.</p>
+          <div className="py-6 text-center">
+            <p className="text-sm font-bold text-gray-600">입력된 대기 내역이 없습니다.</p>
           </div>
         )}
       </div>
 
+      {/* 신설: 오늘의 정산 리포트 (메뉴별 합계) */}
+      {lastFinishedReport && (
+        <div className="apple-card p-6 md:p-8 space-y-6 border-t-4 border-indigo-500 bg-indigo-500/5 animate-in zoom-in-95 duration-500">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-black text-indigo-500"><i className="fas fa-file-invoice-dollar mr-2"></i>오늘의 메뉴별 합계</h3>
+            <button onClick={() => setLastFinishedReport(null)} className="text-gray-400 hover:text-gray-600"><i className="fas fa-times"></i></button>
+          </div>
+          <div className="divide-y divide-indigo-500/10">
+            {lastFinishedReport.map((m, idx) => (
+              <div key={idx} className="flex justify-between py-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold">{m.name}</span>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-500 text-white">x{m.qty}</span>
+                </div>
+                <span className="font-black text-sm">{m.total.toLocaleString()}원</span>
+              </div>
+            ))}
+          </div>
+          <div className="pt-4 border-t border-indigo-500/20 flex justify-between items-center">
+            <span className="text-xs font-bold text-gray-500 uppercase">오늘 총 판매액</span>
+            <span className="text-xl font-black text-indigo-600">{lastFinishedReport.reduce((acc, c) => acc + c.total, 0).toLocaleString()}원</span>
+          </div>
+        </div>
+      )}
+
       {/* STEP 3: 메모 */}
       <div className="apple-card p-6 md:p-8 space-y-4 border-t-4 border-amber-400">
         <div className="flex justify-between items-center">
-          <div className="space-y-1">
-            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">STEP 3. 일별 메모</p>
-            <h3 className="text-lg font-black">오늘의 특이사항</h3>
-          </div>
-          <button 
-            onClick={saveMemo}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${memoSaved ? 'bg-emerald-500 text-white' : 'bg-amber-400/10 text-amber-500 hover:bg-amber-400/20'}`}
-          >
+          <h3 className="text-lg font-black">오늘의 특이사항</h3>
+          <button onClick={saveMemo} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${memoSaved ? 'bg-emerald-500 text-white' : 'bg-amber-400/10 text-amber-500 hover:bg-amber-400/20'}`}>
             {memoSaved ? '저장됨 ✓' : '메모 저장'}
           </button>
         </div>
         <textarea 
-          placeholder="날씨, 손님 반응, 재료 소진 등 오늘의 경영 일지를 기록하세요..."
+          placeholder="오늘의 이슈를 기록하세요..."
           value={memoContent}
           onChange={(e) => setMemoContent(e.target.value)}
-          className={`w-full h-32 p-5 rounded-3xl font-medium text-sm outline-none resize-none transition-all leading-relaxed ${darkMode ? 'bg-[#1C1C1E] text-gray-300 placeholder-gray-700' : 'bg-gray-50 text-gray-800 placeholder-gray-400 focus:bg-white focus:ring-2 ring-amber-100'}`}
+          className={`w-full h-32 p-5 rounded-3xl font-medium text-sm outline-none resize-none transition-all leading-relaxed ${darkMode ? 'bg-[#1C1C1E] text-gray-300' : 'bg-gray-50 text-gray-800 focus:bg-white focus:ring-2 ring-amber-100'}`}
         />
       </div>
     </div>
