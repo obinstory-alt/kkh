@@ -145,13 +145,13 @@ const App: React.FC = () => {
         </div>
         <NavItem active={view === 'dashboard'} onClick={() => setView('dashboard')} icon="fa-chart-pie" label="홈" darkMode={darkMode} />
         <NavItem active={view === 'sales'} onClick={() => setView('sales')} icon="fa-plus-circle" label="판매입력" darkMode={darkMode} />
-        <NavItem active={view === 'stats'} onClick={() => setView('stats'} icon="fa-magnifying-glass-chart" label="심층분석" darkMode={darkMode} />
+        <NavItem active={view === 'stats'} onClick={() => setView('stats')} icon="fa-magnifying-glass-chart" label="심층분석" darkMode={darkMode} />
         <NavItem active={view === 'settings'} onClick={() => setView('settings')} icon="fa-sliders" label="설정" darkMode={darkMode} />
       </nav>
 
       <main className="p-4 md:p-8 max-w-6xl mx-auto">
         {view === 'dashboard' && <Dashboard stats={statsSummary} darkMode={darkMode} />}
-        {view === 'sales' && <SalesBulkInput menuItems={menuItems} platforms={platforms} memos={memos} onFinalSubmit={handleBulkAddSales} onSaveMemo={handleSaveMemo} darkMode={darkMode} storageKeys={STORAGE_KEYS} />}
+        {view === 'sales' && <SalesBulkInput sales={sales} menuItems={menuItems} platforms={platforms} memos={memos} onFinalSubmit={handleBulkAddSales} onSaveMemo={handleSaveMemo} darkMode={darkMode} storageKeys={STORAGE_KEYS} />}
         {view === 'stats' && <AdvancedStats sales={sales} expenses={expenses} menuItems={menuItems} platforms={platforms} memos={memos} setSales={setSales} darkMode={darkMode} />}
         {view === 'settings' && <Settings menuItems={menuItems} setMenuItems={setMenuItems} platforms={platforms} setPlatforms={setPlatforms} expenses={expenses} setExpenses={setExpenses} darkMode={darkMode} setDarkMode={setDarkMode} onBackup={handleBackup} onRestore={handleRestore} />}
       </main>
@@ -213,16 +213,11 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
   const getPName = (id: string) => platforms.find(p => p.id === id)?.name || id;
   const getMName = (id: string) => menuItems.find(m => m.id === id)?.name || id;
 
-  const filteredSales = useMemo(() => sales.filter(s => s.date.startsWith(searchDate)), [sales, searchDate]);
+  // 선택한 날짜에 해당하는 매출만 필터링 (심층 분석 상단용)
+  const filteredSalesForDate = useMemo(() => sales.filter(s => s.date.startsWith(searchDate)), [sales, searchDate]);
   const currentMemo = useMemo(() => memos.find(m => m.date === searchDate)?.content || '', [memos, searchDate]);
 
-  const searchSummary = useMemo(() => {
-    const revenue = filteredSales.reduce((acc, s) => acc + s.totalPrice, 0);
-    const settlement = filteredSales.reduce((acc, s) => acc + s.settlementAmount, 0);
-    return { revenue, settlement };
-  }, [filteredSales]);
-
-  // 기간별 집계 로직 (주간 추가)
+  // 기간별 집계 로직
   const aggregated = useMemo(() => {
     const map: Record<string, { label: string, revenue: number, settlement: number, profit: number }> = {};
     const fixed = expenses.filter(e => e.type === 'fixed').reduce((acc, curr) => acc + curr.value, 0);
@@ -239,7 +234,7 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
         const pastDaysOfYear = (d.getTime() - firstDayOfYear.getTime()) / 86400000;
         const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
         key = `${d.getFullYear()}-W${weekNum}`;
-        label = `${weekNum}주차`;
+        label = `${weekNum}주`;
       } else if (timeUnit === 'monthly') { 
         key = `${d.getFullYear()}-${d.getMonth()+1}`; 
         label = `${d.getMonth()+1}월`; 
@@ -253,15 +248,39 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
     });
 
     return Object.entries(map).sort(([a],[b]) => a.localeCompare(b)).map(([_, v]) => {
-      let fCost = timeUnit === 'daily' ? fixed/30 : timeUnit === 'weekly' ? fixed/4 : timeUnit === 'monthly' ? fixed : fixed*12;
+      let fCost = timeUnit === 'daily' ? fixed/30 : timeUnit === 'weekly' ? fixed/4.3 : timeUnit === 'monthly' ? fixed : fixed*12;
       return { ...v, profit: v.settlement - (v.revenue * vRate) - fCost };
-    }).slice(timeUnit === 'daily' ? -14 : -10);
+    }).slice(-12);
   }, [sales, expenses, timeUnit]);
 
-  // 메뉴별 분석 데이터 (모든 기간 합산용 또는 선택 기간용)
+  // 메뉴별 분석 데이터 (모든 과거 데이터 포함 집계)
   const menuRanking = useMemo(() => {
     const map: Record<string, { name: string, qty: number, revenue: number }> = {};
-    const targetSales = timeUnit === 'daily' ? filteredSales : sales; // 일간일때는 선택날짜, 나머지는 전체 데이터(샘플링)
+    
+    // 시간 단위에 따른 필터링 범위 결정
+    let targetSales = sales;
+    if (timeUnit === 'daily') {
+      targetSales = sales.filter(s => s.date.startsWith(searchDate));
+    } else if (timeUnit === 'weekly') {
+      const d = new Date(searchDate);
+      const day = d.getDay() || 7;
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - day + 1);
+      monday.setHours(0,0,0,0);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      sunday.setHours(23,59,59,999);
+      targetSales = sales.filter(s => {
+        const sd = new Date(s.date);
+        return sd >= monday && sd <= sunday;
+      });
+    } else if (timeUnit === 'monthly') {
+      const targetMonth = searchDate.slice(0, 7); // YYYY-MM
+      targetSales = sales.filter(s => s.date.startsWith(targetMonth));
+    } else if (timeUnit === 'yearly') {
+      const targetYear = searchDate.slice(0, 4); // YYYY
+      targetSales = sales.filter(s => s.date.startsWith(targetYear));
+    }
     
     targetSales.forEach(s => {
       if (!map[s.menuId]) map[s.menuId] = { name: getMName(s.menuId), qty: 0, revenue: 0 };
@@ -270,7 +289,7 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
     });
 
     return Object.values(map).sort((a, b) => b.revenue - a.revenue);
-  }, [sales, filteredSales, timeUnit, menuItems]);
+  }, [sales, searchDate, timeUnit, menuItems]);
 
   return (
     <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
@@ -287,7 +306,7 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
 
       <div className="apple-card p-6 md:p-8 space-y-8">
         <div className="flex justify-between items-center">
-          <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">조회 및 메모</h3>
+          <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">기준 일자 선택</h3>
           <input 
             type="date" 
             value={searchDate} 
@@ -298,34 +317,15 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
 
         {currentMemo && (
           <div className={`p-6 rounded-3xl border-l-4 border-amber-400 ${darkMode ? 'bg-amber-400/5' : 'bg-amber-50'}`}>
-            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2"><i className="fas fa-sticky-note mr-1"></i> 당일 특이사항</p>
+            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2"><i className="fas fa-sticky-note mr-1"></i> {searchDate} 메모</p>
             <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">{currentMemo}</p>
-          </div>
-        )}
-        
-        {filteredSales.length > 0 ? (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div className={`p-5 rounded-2xl ${darkMode ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
-                <p className="text-[10px] font-black text-[#448AFF] uppercase mb-1">일 매출액</p>
-                <p className="text-xl font-black text-[#448AFF]">{searchSummary.revenue.toLocaleString()}원</p>
-              </div>
-              <div className={`p-5 rounded-2xl ${darkMode ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
-                <p className="text-[10px] font-black text-[#B9F6CA] uppercase mb-1">일 정산액</p>
-                <p className="text-xl font-black text-[#B9F6CA]">{searchSummary.settlement.toLocaleString()}원</p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="py-10 text-center">
-            <p className="text-sm font-bold text-gray-500">조회된 날짜의 매출 데이터가 없습니다.</p>
           </div>
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="apple-card p-6 md:p-8">
-          <h3 className="text-xs font-black mb-8 uppercase tracking-widest text-gray-500">수익성 흐름 ({timeUnit})</h3>
+          <h3 className="text-xs font-black mb-8 uppercase tracking-widest text-gray-500">최근 12개 기간 수익성 ({timeUnit})</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={aggregated}>
@@ -340,7 +340,9 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
         </div>
 
         <div className="apple-card p-6 md:p-8">
-          <h3 className="text-xs font-black mb-8 uppercase tracking-widest text-gray-500">메뉴별 판매 랭킹</h3>
+          <div className="flex justify-between items-center mb-8">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">선택 기간 메뉴 분석 ({timeUnit})</h3>
+          </div>
           <div className="space-y-4 max-h-[256px] overflow-y-auto no-scrollbar">
             {menuRanking.map((m, idx) => (
               <div key={idx} className="flex items-center gap-4">
@@ -355,14 +357,14 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
                   <div className="w-full h-1.5 bg-gray-200 dark:bg-white/5 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-blue-500 rounded-full" 
-                      style={{ width: `${(m.revenue / menuRanking[0].revenue) * 100}%` }}
+                      style={{ width: `${(m.revenue / (menuRanking[0]?.revenue || 1)) * 100}%` }}
                     ></div>
                   </div>
                 </div>
                 <div className="text-[10px] font-black text-gray-500 whitespace-nowrap">{m.qty}개</div>
               </div>
             ))}
-            {menuRanking.length === 0 && <p className="text-center py-10 text-xs text-gray-500">판매 기록이 없습니다.</p>}
+            {menuRanking.length === 0 && <p className="text-center py-10 text-xs text-gray-500">해당 기간 판매 기록이 없습니다.</p>}
           </div>
         </div>
       </div>
@@ -377,7 +379,7 @@ const StatCard: React.FC<{ label: string; value: number; color: string; darkMode
   </div>
 );
 
-const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig[], memos: DailyMemo[], onFinalSubmit: (records: SaleRecord[]) => void, onSaveMemo: (date: string, content: string) => void, darkMode: boolean, storageKeys: any }> = ({ menuItems, platforms, memos, onFinalSubmit, onSaveMemo, darkMode, storageKeys }) => {
+const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], platforms: PlatformConfig[], memos: DailyMemo[], onFinalSubmit: (records: SaleRecord[]) => void, onSaveMemo: (date: string, content: string) => void, darkMode: boolean, storageKeys: any }> = ({ sales, menuItems, platforms, memos, onFinalSubmit, onSaveMemo, darkMode, storageKeys }) => {
   const [platform, setPlatform] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   
@@ -397,8 +399,22 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
 
   const [isFinishing, setIsFinishing] = useState(false);
   const [memoSaved, setMemoSaved] = useState(false);
-  const [lastFinishedReport, setLastFinishedReport] = useState<any[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 실시간 합계 리포트 (선택한 날짜의 모든 과거 기록 포함)
+  const consolidatedReportForDate = useMemo(() => {
+    const dateSales = sales.filter(s => s.date.startsWith(date));
+    const menuMap: Record<string, { name: string, qty: number, total: number }> = {};
+    
+    dateSales.forEach(r => {
+      const menuName = menuItems.find(m => m.id === r.menuId)?.name || r.menuId;
+      if (!menuMap[r.menuId]) menuMap[r.menuId] = { name: menuName, qty: 0, total: 0 };
+      menuMap[r.menuId].qty += r.quantity;
+      menuMap[r.menuId].total += r.totalPrice;
+    });
+    
+    return Object.values(menuMap).sort((a, b) => b.total - a.total);
+  }, [sales, date, menuItems]);
 
   useEffect(() => {
     localStorage.setItem(storageKeys.TEMP_FORM, JSON.stringify(formData));
@@ -415,6 +431,7 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
   useEffect(() => {
     const existingMemo = memos.find(m => m.date === date);
     if (existingMemo) setMemoContent(existingMemo.content);
+    else setMemoContent(localStorage.getItem(storageKeys.TEMP_MEMO) || '');
   }, [date, memos]);
 
   const getPName = (id: string) => platforms.find(p => p.id === id)?.name || id;
@@ -462,7 +479,6 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
       setFormData({});
       setTempQueue([]);
       setMemoContent('');
-      setLastFinishedReport(null);
       localStorage.removeItem(storageKeys.TEMP_FORM);
       localStorage.removeItem(storageKeys.TEMP_QUEUE);
       localStorage.removeItem(storageKeys.TEMP_MEMO);
@@ -472,24 +488,15 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
   const submitFinal = () => {
     if (tempQueue.length === 0) return;
     setIsFinishing(true);
-    
-    // 메뉴별 합계 계산 (레포트용)
-    const menuMap: Record<string, { name: string, qty: number, total: number }> = {};
-    tempQueue.forEach(r => {
-      if (!menuMap[r.menuId]) menuMap[r.menuId] = { name: getMName(r.menuId), qty: 0, total: 0 };
-      menuMap[r.menuId].qty += r.quantity;
-      menuMap[r.menuId].total += r.totalPrice;
-    });
 
     setTimeout(() => {
       onFinalSubmit(tempQueue);
-      setLastFinishedReport(Object.values(menuMap));
       setTempQueue([]);
       setFormData({});
       localStorage.removeItem(storageKeys.TEMP_FORM);
       localStorage.removeItem(storageKeys.TEMP_QUEUE);
       setIsFinishing(false);
-      alert('정산 마감이 완료되었습니다! 메뉴별 합계를 확인하세요.');
+      alert('정산 마감이 완료되었습니다! 하단 리포트에서 결과를 확인하세요.');
     }, 800);
   };
 
@@ -578,7 +585,7 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
         <div className="flex justify-between items-center">
           <div className="space-y-1">
             <p className="text-[10px] font-black text-[#448AFF] uppercase tracking-widest">STEP 1. 정보 입력</p>
-            <h3 className="text-lg font-black">플랫폼별 실적 기입</h3>
+            <h3 className="text-lg font-black">실적 기입 ({date})</h3>
           </div>
           <input type="date" value={date} onChange={e=>setDate(e.target.value)} className={`text-sm font-bold p-3 rounded-2xl outline-none border-none ${darkMode ? 'bg-[#2C2C2E]' : 'bg-gray-100'}`} />
         </div>
@@ -610,7 +617,7 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
       <div className="apple-card p-6 md:p-8 space-y-6 border-t-4 border-[#B9F6CA]">
         <div className="space-y-1">
           <p className="text-[10px] font-black text-[#B9F6CA] uppercase tracking-widest">STEP 2. 정산 대기 목록</p>
-          <h3 className="text-lg font-black">오늘의 정산 내역 확인</h3>
+          <h3 className="text-lg font-black">정산 전 최종 확인</h3>
         </div>
 
         {tempQueue.length > 0 ? (
@@ -648,30 +655,43 @@ const SalesBulkInput: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfi
         )}
       </div>
 
-      {/* 신설: 오늘의 정산 리포트 (메뉴별 합계) */}
-      {lastFinishedReport && (
-        <div className="apple-card p-6 md:p-8 space-y-6 border-t-4 border-indigo-500 bg-indigo-500/5 animate-in zoom-in-95 duration-500">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-black text-indigo-500"><i className="fas fa-file-invoice-dollar mr-2"></i>오늘의 메뉴별 합계</h3>
-            <button onClick={() => setLastFinishedReport(null)} className="text-gray-400 hover:text-gray-600"><i className="fas fa-times"></i></button>
+      {/* 통합 리포트 (선택한 날짜의 모든 기록 통합 집계) */}
+      <div className="apple-card p-6 md:p-8 space-y-6 border-t-4 border-indigo-500 bg-indigo-500/5">
+        <div className="flex justify-between items-center">
+          <div className="space-y-1">
+            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">DATE CONSOLIDATED REPORT</p>
+            <h3 className="text-lg font-black">{date} 메뉴별 통합 집계</h3>
           </div>
-          <div className="divide-y divide-indigo-500/10">
-            {lastFinishedReport.map((m, idx) => (
-              <div key={idx} className="flex justify-between py-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold">{m.name}</span>
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-500 text-white">x{m.qty}</span>
-                </div>
-                <span className="font-black text-sm">{m.total.toLocaleString()}원</span>
-              </div>
-            ))}
-          </div>
-          <div className="pt-4 border-t border-indigo-500/20 flex justify-between items-center">
-            <span className="text-xs font-bold text-gray-500 uppercase">오늘 총 판매액</span>
-            <span className="text-xl font-black text-indigo-600">{lastFinishedReport.reduce((acc, c) => acc + c.total, 0).toLocaleString()}원</span>
-          </div>
+          <i className="fas fa-chart-line text-indigo-500 text-xl"></i>
         </div>
-      )}
+        
+        {consolidatedReportForDate.length > 0 ? (
+          <div className="space-y-3">
+            <div className="divide-y divide-indigo-500/10">
+              {consolidatedReportForDate.map((m, idx) => (
+                <div key={idx} className="flex justify-between py-4 group hover:bg-indigo-500/5 rounded-xl transition-colors px-2">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black ${idx === 0 ? 'bg-indigo-500 text-white' : 'bg-gray-200 dark:bg-white/10 text-gray-500'}`}>
+                      {idx + 1}
+                    </div>
+                    <span className="text-sm font-bold">{m.name}</span>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600">x{m.qty}</span>
+                  </div>
+                  <span className="font-black text-sm text-indigo-600">{m.total.toLocaleString()}원</span>
+                </div>
+              ))}
+            </div>
+            <div className="pt-4 border-t border-indigo-500/20 flex justify-between items-center">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">TOTAL SALES FOR DAY</span>
+              <span className="text-xl font-black text-indigo-600">{consolidatedReportForDate.reduce((acc, c) => acc + c.total, 0).toLocaleString()}원</span>
+            </div>
+          </div>
+        ) : (
+          <div className="py-10 text-center">
+            <p className="text-xs font-bold text-gray-400">기록된 매출이 없습니다. 날짜를 확인해 주세요.</p>
+          </div>
+        )}
+      </div>
 
       {/* STEP 3: 메모 */}
       <div className="apple-card p-6 md:p-8 space-y-4 border-t-4 border-amber-400">
