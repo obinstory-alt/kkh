@@ -81,13 +81,13 @@ const App: React.FC = () => {
     const now = new Date();
     const currentYearMonth = now.toISOString().slice(0, 7); // YYYY-MM
     
-    // 이번 달 누적 (1일부터 오늘까지 - 1일 리셋 보장)
+    // 이번 달 누적 (1일부터 오늘까지)
     const monthSales = sales.filter(s => s.date.startsWith(currentYearMonth));
     const mtdRevenue = monthSales.reduce((acc, curr) => acc + curr.totalPrice, 0);
     const mtdSettlement = monthSales.reduce((acc, curr) => acc + curr.settlementAmount, 0);
     const mtdProfit = mtdSettlement - (mtdRevenue * variableRate) - (fixedCosts / 30 * now.getDate());
 
-    // 지난 달 성과 (전달 마감 데이터용)
+    // 지난 달 성과
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthYearMonth = lastMonthDate.toISOString().slice(0, 7);
     const lastMonthSales = sales.filter(s => s.date.startsWith(lastMonthYearMonth));
@@ -197,11 +197,12 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
       </div>
     </header>
 
+    {/* 상단 핵심 지표: 전월 매출, 당월 매출, 당월 정산, 당월 순익 */}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-      <StatCard label="누적 매출액" value={stats.totalRevenue} color={darkMode ? "text-[#82B1FF]" : "text-blue-600"} darkMode={darkMode} />
-      <StatCard label="누적 정산액" value={stats.totalSettlement} color={darkMode ? "text-indigo-300" : "text-indigo-600"} darkMode={darkMode} />
-      <StatCard label="누적 지출" value={stats.totalCosts} color={darkMode ? "text-[#FF8A80]" : "text-rose-600"} darkMode={darkMode} />
-      <StatCard label="최종 순이익" value={stats.totalProfit} color={darkMode ? "text-[#B9F6CA]" : "text-emerald-600"} darkMode={darkMode} />
+      <StatCard label={`${stats.lastMonthName}월 매출액`} value={stats.lastMonthRevenue} color={darkMode ? "text-gray-400" : "text-gray-600"} darkMode={darkMode} />
+      <StatCard label={`${stats.currentMonthName}월 매출액`} value={stats.mtdRevenue} color={darkMode ? "text-[#82B1FF]" : "text-blue-600"} darkMode={darkMode} />
+      <StatCard label={`${stats.currentMonthName}월 정산액`} value={stats.mtdSettlement} color={darkMode ? "text-indigo-300" : "text-indigo-600"} darkMode={darkMode} />
+      <StatCard label={`${stats.currentMonthName}월 순이익`} value={stats.mtdProfit} color={darkMode ? "text-[#B9F6CA]" : "text-emerald-600"} darkMode={darkMode} />
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -228,11 +229,11 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
           </div>
         </div>
 
-        {/* 지난달 마감 성과 요약 */}
+        {/* 지난달 마감 성과 요약 (보조 정보) */}
         <div className={`p-6 rounded-[28px] border-l-8 border-indigo-500/30 flex justify-between items-center transition-all ${darkMode ? 'bg-indigo-500/5' : 'bg-indigo-50/50'}`}>
           <div>
             <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">지난 {stats.lastMonthName}월 마감 리포트</p>
-            <h4 className="text-sm font-bold text-gray-500">직전 달 성과 요약</h4>
+            <h4 className="text-sm font-bold text-gray-500">전체 매출 대비 정산 요율 확인</h4>
           </div>
           <div className="flex gap-8 text-right">
             <div>
@@ -250,21 +251,21 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
       <div className="apple-card p-6 md:p-8 flex flex-col justify-between border-t-4 border-indigo-500">
         <div className="space-y-1">
           <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">MONTHLY PROGRESS</p>
-          <h3 className="text-xl font-black">{stats.currentMonthName}월 실시간 집계</h3>
-          <p className="text-[10px] text-gray-500 font-bold">1일부터 오늘까지 (자동 리셋됨)</p>
+          <h3 className="text-xl font-black">{stats.currentMonthName}월 실시간 현황</h3>
+          <p className="text-[10px] text-gray-500 font-bold">1일부터 오늘까지 자동 집계</p>
         </div>
         
         <div className="space-y-6 my-6">
           <div className="flex justify-between items-end">
-            <span className="text-xs font-bold text-gray-500">이번 달 매출</span>
+            <span className="text-xs font-bold text-gray-500">당월 매출</span>
             <span className="text-lg font-black">{stats.mtdRevenue.toLocaleString()}원</span>
           </div>
           <div className="flex justify-between items-end">
-            <span className="text-xs font-bold text-gray-500">이번 달 정산</span>
+            <span className="text-xs font-bold text-gray-500">당월 정산</span>
             <span className="text-lg font-black text-indigo-500">{stats.mtdSettlement.toLocaleString()}원</span>
           </div>
           <div className="flex justify-between items-end pt-4 border-t border-white/5">
-            <span className="text-xs font-bold text-gray-500">예상 순이익</span>
+            <span className="text-xs font-bold text-gray-500">당월 순익</span>
             <span className="text-xl font-black text-emerald-500">{Math.max(0, Math.round(stats.mtdProfit)).toLocaleString()}원</span>
           </div>
         </div>
@@ -445,7 +446,7 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
 
 const StatCard: React.FC<{ label: string; value: number; color: string; darkMode: boolean }> = ({ label, value, color, darkMode }) => (
   <div className={`apple-card p-6 flex flex-col justify-between transition-all hover:scale-[1.02] cursor-default border-l-4 ${darkMode ? 'border-l-white/10' : 'border-l-black/5'}`}>
-    <span className="text-gray-500 text-[10px] font-black uppercase tracking-tighter mb-2">{label}</span>
+    <span className="text-gray-500 text-[10px] font-black uppercase tracking-tighter mb-1">{label}</span>
     <span className={`text-xl font-black ${color}`}>{Math.round(value).toLocaleString()}<span className="text-[10px] ml-1 opacity-60">원</span></span>
   </div>
 );
