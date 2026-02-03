@@ -25,17 +25,18 @@ interface InternalBackup {
 }
 
 const App: React.FC = () => {
+  const CURRENT_VERSION = 'v18';
   const STORAGE_KEYS = {
-    MENU: 'biz_total_v18_menu',
-    PLATFORMS: 'biz_total_v18_platforms',
-    SALES: 'biz_total_v18_sales',
-    EXPENSES: 'biz_total_v18_expenses',
-    MEMOS: 'biz_total_v18_memos',
-    THEME: 'biz_total_v18_theme',
-    TEMP_FORM: 'biz_total_v18_temp_form',
-    TEMP_QUEUE: 'biz_total_v18_temp_queue',
-    TEMP_MEMO: 'biz_total_v18_temp_memo',
-    BACKUPS: 'biz_total_v18_internal_backups'
+    MENU: `biz_total_${CURRENT_VERSION}_menu`,
+    PLATFORMS: `biz_total_${CURRENT_VERSION}_platforms`,
+    SALES: `biz_total_${CURRENT_VERSION}_sales`,
+    EXPENSES: `biz_total_${CURRENT_VERSION}_expenses`,
+    MEMOS: `biz_total_${CURRENT_VERSION}_memos`,
+    THEME: `biz_total_${CURRENT_VERSION}_theme`,
+    TEMP_FORM: `biz_total_${CURRENT_VERSION}_temp_form`,
+    TEMP_QUEUE: `biz_total_${CURRENT_VERSION}_temp_queue`,
+    TEMP_MEMO: `biz_total_${CURRENT_VERSION}_temp_memo`,
+    BACKUPS: `biz_total_${CURRENT_VERSION}_internal_backups`
   };
 
   const [view, setView] = useState<'dashboard' | 'sales' | 'stats' | 'settings'>('dashboard');
@@ -177,6 +178,48 @@ const App: React.FC = () => {
     }
   };
 
+  const handleMigration = () => {
+    const versions = ['v1', 'v2', 'v16', 'v17']; // 탐색할 구버전들
+    let foundCount = 0;
+    let migratedSales: SaleRecord[] = [];
+    let migratedMemos: DailyMemo[] = [];
+
+    versions.forEach(v => {
+      const s = localStorage.getItem(`biz_total_${v}_sales`);
+      const m = localStorage.getItem(`biz_total_${v}_memos`);
+      if (s) {
+        try {
+          const parsed = JSON.parse(s);
+          migratedSales = [...migratedSales, ...parsed];
+          foundCount++;
+        } catch(e) {}
+      }
+      if (m) {
+        try {
+          const parsed = JSON.parse(m);
+          migratedMemos = [...migratedMemos, ...parsed];
+        } catch(e) {}
+      }
+    });
+
+    if (foundCount > 0) {
+      if (confirm(`구버전(${versions.join(', ')})에서 ${migratedSales.length}건의 판매 데이터를 찾았습니다. 현재 데이터에 합치시겠습니까?`)) {
+        // 중복 제거 (ID 기준)
+        const combinedSales = [...sales, ...migratedSales];
+        const uniqueSales = Array.from(new Map(combinedSales.map(item => [item.id, item])).values());
+        
+        const combinedMemos = [...memos, ...migratedMemos];
+        const uniqueMemos = Array.from(new Map(combinedMemos.map(item => [item.date, item])).values());
+
+        setSales(uniqueSales);
+        setMemos(uniqueMemos);
+        alert('데이터 통합이 완료되었습니다.');
+      }
+    } else {
+      alert('이전 버전의 데이터를 찾을 수 없습니다.');
+    }
+  };
+
   const handleDeleteBackup = (id: string) => {
     if (confirm('해당 백업을 삭제하시겠습니까?')) {
       setInternalBackups(prev => prev.filter(b => b.id !== id));
@@ -251,6 +294,7 @@ const App: React.FC = () => {
             internalBackups={internalBackups}
             onRestoreInternal={handleRestoreFromInternal}
             onDeleteBackup={handleDeleteBackup}
+            onMigration={handleMigration}
             darkMode={darkMode} setDarkMode={setDarkMode} 
             onBackup={handleBackup} onRestore={handleRestore}
             onResetAll={handleResetAll}
@@ -761,7 +805,7 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
   );
 };
 
-const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: PlatformConfig[], setPlatforms: any, expenses: ExpenseItem[], setExpenses: any, internalBackups: InternalBackup[], onRestoreInternal: (b: InternalBackup) => void, onDeleteBackup: (id: string) => void, darkMode: boolean, setDarkMode: any, onBackup: () => void, onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void, onResetAll: () => void }> = ({ menuItems, setMenuItems, platforms, setPlatforms, expenses, setExpenses, internalBackups, onRestoreInternal, onDeleteBackup, darkMode, setDarkMode, onBackup, onRestore, onResetAll }) => {
+const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: PlatformConfig[], setPlatforms: any, expenses: ExpenseItem[], setExpenses: any, internalBackups: InternalBackup[], onRestoreInternal: (b: InternalBackup) => void, onDeleteBackup: (id: string) => void, onMigration: () => void, darkMode: boolean, setDarkMode: any, onBackup: () => void, onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void, onResetAll: () => void }> = ({ menuItems, setMenuItems, platforms, setPlatforms, expenses, setExpenses, internalBackups, onRestoreInternal, onDeleteBackup, onMigration, darkMode, setDarkMode, onBackup, onRestore, onResetAll }) => {
   const [tab, setTab] = useState<'menu' | 'platform' | 'expense' | 'backup'>('menu');
   const [show, setShow] = useState(false);
   const [name, setName] = useState('');
@@ -790,16 +834,24 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
       <div className="apple-card p-6 md:p-8 min-h-[400px]">
         {tab === 'backup' ? (
           <div className="space-y-6">
-            <div className="space-y-1">
-              <h4 className="font-black text-lg">로컬 자동 백업 관리</h4>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">최근 10일치 정산 내역이 보존됩니다.</p>
+            <div className="space-y-2">
+              <h4 className="font-black text-lg">데이터 보호 시스템</h4>
+              <p className="text-xs text-gray-500 font-medium leading-relaxed">정산 마감을 할 때마다 최근 10일치의 데이터가 자동으로 기기에 저장됩니다. 업데이트 후 데이터가 보이지 않는다면 아래 [이전 버전 데이터 찾기]를 먼저 시도해보세요.</p>
             </div>
-            <div className="space-y-3">
+
+            <div className="pt-2">
+               <button onClick={onMigration} className="w-full py-4 bg-[#448AFF]/10 text-[#448AFF] rounded-2xl font-black text-xs hover:bg-[#448AFF]/20 transition-all">
+                 <i className="fas fa-search-plus mr-2"></i> 이전 버전 데이터 찾기 (복구 전문가 도구)
+               </button>
+            </div>
+
+            <div className="space-y-3 pt-4 border-t border-white/5">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">자동 저장된 백업 지점</p>
               {internalBackups.length > 0 ? internalBackups.map(b => (
                 <div key={b.id} className={`flex justify-between items-center p-4 rounded-2xl ${darkMode ? 'bg-[#2C2C2E]/50' : 'bg-gray-50'}`}>
                   <div className="space-y-1">
                     <p className="text-xs font-bold">{new Date(b.timestamp).toLocaleString('ko-KR')}</p>
-                    <p className="text-[9px] text-gray-500 font-black">Rolling Archive</p>
+                    <p className="text-[9px] text-gray-500 font-black">Rolling Archive Point</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => onRestoreInternal(b)} className="px-3 py-2 rounded-xl text-[10px] font-black bg-blue-500/10 text-blue-500">복구</button>
@@ -807,7 +859,7 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
                   </div>
                 </div>
               )) : (
-                <div className="py-10 text-center text-gray-500 text-xs font-bold">백업 기록이 없습니다.</div>
+                <div className="py-10 text-center text-gray-500 text-xs font-bold">아직 생성된 자동 백업이 없습니다.</div>
               )}
             </div>
           </div>
@@ -851,7 +903,7 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
       <div className="flex flex-col gap-4">
         <div className="flex gap-4">
           <button onClick={()=>setDarkMode(!darkMode)} className="flex-1 py-4 bg-white/5 rounded-2xl font-bold border border-white/5 shadow-sm transition-all active:scale-95">테마 전환</button>
-          <button onClick={onBackup} className="flex-1 py-4 bg-white/5 rounded-2xl font-bold border border-white/5 shadow-sm transition-all active:scale-95">전체 백업</button>
+          <button onClick={onBackup} className="flex-1 py-4 bg-white/5 rounded-2xl font-bold border border-white/5 shadow-sm transition-all active:scale-95">수동 파일 백업</button>
         </div>
         
         <div className="pt-10 border-t border-white/5">
