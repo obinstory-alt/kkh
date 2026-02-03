@@ -180,43 +180,42 @@ const App: React.FC = () => {
 
   const handleMigration = () => {
     const versions = ['v1', 'v2', 'v16', 'v17']; // 탐색할 구버전들
-    let foundCount = 0;
-    let migratedSales: SaleRecord[] = [];
-    let migratedMemos: DailyMemo[] = [];
+    let foundSomething = false;
+    let mSales: SaleRecord[] = [];
+    let mMemos: DailyMemo[] = [];
+    let mMenu: MenuItem[] = [...menuItems];
+    let mPlatforms: PlatformConfig[] = [...platforms];
+    let mExpenses: ExpenseItem[] = [...expenses];
 
     versions.forEach(v => {
-      const s = localStorage.getItem(`biz_total_${v}_sales`);
-      const m = localStorage.getItem(`biz_total_${v}_memos`);
-      if (s) {
-        try {
-          const parsed = JSON.parse(s);
-          migratedSales = [...migratedSales, ...parsed];
-          foundCount++;
-        } catch(e) {}
-      }
-      if (m) {
-        try {
-          const parsed = JSON.parse(m);
-          migratedMemos = [...migratedMemos, ...parsed];
-        } catch(e) {}
-      }
+      const sRaw = localStorage.getItem(`biz_total_${v}_sales`);
+      const mRaw = localStorage.getItem(`biz_total_${v}_memos`);
+      const menuRaw = localStorage.getItem(`biz_total_${v}_menu`);
+      const platRaw = localStorage.getItem(`biz_total_${v}_platforms`);
+      const expRaw = localStorage.getItem(`biz_total_${v}_expenses`);
+
+      if (sRaw) { try { mSales = [...mSales, ...JSON.parse(sRaw)]; foundSomething = true; } catch(e){} }
+      if (mRaw) { try { mMemos = [...mMemos, ...JSON.parse(mRaw)]; foundSomething = true; } catch(e){} }
+      if (menuRaw) { try { mMenu = JSON.parse(menuRaw); foundSomething = true; } catch(e){} }
+      if (platRaw) { try { mPlatforms = JSON.parse(platRaw); foundSomething = true; } catch(e){} }
+      if (expRaw) { try { mExpenses = JSON.parse(expRaw); foundSomething = true; } catch(e){} }
     });
 
-    if (foundCount > 0) {
-      if (confirm(`구버전(${versions.join(', ')})에서 ${migratedSales.length}건의 판매 데이터를 찾았습니다. 현재 데이터에 합치시겠습니까?`)) {
-        // 중복 제거 (ID 기준)
-        const combinedSales = [...sales, ...migratedSales];
-        const uniqueSales = Array.from(new Map(combinedSales.map(item => [item.id, item])).values());
-        
-        const combinedMemos = [...memos, ...migratedMemos];
-        const uniqueMemos = Array.from(new Map(combinedMemos.map(item => [item.date, item])).values());
+    if (foundSomething) {
+      if (confirm(`이전 버전에서 저장된 데이터를 발견했습니다!\n현재 설정(메뉴/플랫폼)과 판매 내역(${mSales.length}건)을 복구하시겠습니까?`)) {
+        // 중복 제거 및 병합
+        const uniqueSales = Array.from(new Map([...sales, ...mSales].map(i => [i.id, i])).values());
+        const uniqueMemos = Array.from(new Map([...memos, ...mMemos].map(i => [i.date, i])).values());
 
         setSales(uniqueSales);
         setMemos(uniqueMemos);
-        alert('데이터 통합이 완료되었습니다.');
+        setMenuItems(mMenu);
+        setPlatforms(mPlatforms);
+        setExpenses(mExpenses);
+        alert('성공적으로 데이터를 찾아 통합했습니다. 모든 탭을 확인해보세요!');
       }
     } else {
-      alert('이전 버전의 데이터를 찾을 수 없습니다.');
+      alert('아쉽게도 이전 버전의 흔적을 찾을 수 없습니다.\n파일 백업본이 있으시다면 [수동 파일 복원]을 이용해주세요.');
     }
   };
 
@@ -835,23 +834,27 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
         {tab === 'backup' ? (
           <div className="space-y-6">
             <div className="space-y-2">
-              <h4 className="font-black text-lg">데이터 보호 시스템</h4>
-              <p className="text-xs text-gray-500 font-medium leading-relaxed">정산 마감을 할 때마다 최근 10일치의 데이터가 자동으로 기기에 저장됩니다. 업데이트 후 데이터가 보이지 않는다면 아래 [이전 버전 데이터 찾기]를 먼저 시도해보세요.</p>
+              <h4 className="font-black text-lg">데이터 보호 및 전문가 복구</h4>
+              <p className="text-xs text-gray-500 font-medium leading-relaxed">
+                업데이트로 인해 기존 데이터가 보이지 않는다면, 아래 **[이전 버전 데이터 찾기]** 버튼을 통해 기기 구석구석에 남은 데이터를 찾아 복구할 수 있습니다.
+              </p>
             </div>
 
-            <div className="pt-2">
-               <button onClick={onMigration} className="w-full py-4 bg-[#448AFF]/10 text-[#448AFF] rounded-2xl font-black text-xs hover:bg-[#448AFF]/20 transition-all">
-                 <i className="fas fa-search-plus mr-2"></i> 이전 버전 데이터 찾기 (복구 전문가 도구)
+            <div className="p-5 rounded-3xl bg-blue-500/5 border border-blue-500/10 space-y-4">
+               <h5 className="text-xs font-black text-[#448AFF] uppercase tracking-widest">긴급 데이터 심폐소생술</h5>
+               <button onClick={onMigration} className="w-full py-4 bg-[#448AFF] text-white rounded-2xl font-black text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-blue-500/20">
+                 <i className="fas fa-search-plus mr-2"></i> 이전 버전 데이터 찾기 (지금 실행)
                </button>
+               <p className="text-[10px] text-gray-500 text-center font-bold">이 버튼은 v1~v17의 모든 데이터를 찾아 현재로 가져옵니다.</p>
             </div>
 
-            <div className="space-y-3 pt-4 border-t border-white/5">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">자동 저장된 백업 지점</p>
+            <div className="space-y-3 pt-6 border-t border-white/5">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">v18 자동 저장 백업 리스트</p>
               {internalBackups.length > 0 ? internalBackups.map(b => (
                 <div key={b.id} className={`flex justify-between items-center p-4 rounded-2xl ${darkMode ? 'bg-[#2C2C2E]/50' : 'bg-gray-50'}`}>
                   <div className="space-y-1">
                     <p className="text-xs font-bold">{new Date(b.timestamp).toLocaleString('ko-KR')}</p>
-                    <p className="text-[9px] text-gray-500 font-black">Rolling Archive Point</p>
+                    <p className="text-[9px] text-gray-500 font-black">Auto Backup Point</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => onRestoreInternal(b)} className="px-3 py-2 rounded-xl text-[10px] font-black bg-blue-500/10 text-blue-500">복구</button>
@@ -859,7 +862,7 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
                   </div>
                 </div>
               )) : (
-                <div className="py-10 text-center text-gray-500 text-xs font-bold">아직 생성된 자동 백업이 없습니다.</div>
+                <div className="py-10 text-center text-gray-400 text-xs font-bold bg-white/5 rounded-3xl border border-dashed border-gray-500/20">현재 버전에서 생성된 자동 백업이 없습니다.</div>
               )}
             </div>
           </div>
