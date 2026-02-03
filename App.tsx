@@ -76,9 +76,8 @@ const App: React.FC = () => {
     
     const now = new Date();
     const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth(); // 0-11
+    const currentMonth = now.getMonth(); 
 
-    // 당월 지표 계산 (이번 달 1일부터 오늘까지)
     const mtdSales = sales.filter(s => {
       const d = new Date(s.date);
       return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
@@ -87,7 +86,6 @@ const App: React.FC = () => {
     const mtdSettlement = mtdSales.reduce((acc, curr) => acc + curr.settlementAmount, 0);
     const mtdProfit = mtdSettlement - (mtdRevenue * variableRate) - (fixedCosts / 30 * now.getDate());
 
-    // 전월 누적 매출 계산 (저번 달 1일부터 말일까지)
     const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
     const targetYear = lastMonthDate.getFullYear();
     const targetMonth = lastMonthDate.getMonth();
@@ -98,7 +96,6 @@ const App: React.FC = () => {
     });
     const lastMonthRevenue = lastMonthSales.reduce((acc, curr) => acc + curr.totalPrice, 0);
 
-    // 차트 데이터 (최근 7일)
     const dailyDataMap: Record<string, { date: string, revenue: number, settlement: number }> = {};
     sales.forEach(s => {
       const d = new Date(s.date);
@@ -289,8 +286,9 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
 );
 
 const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], menuItems: MenuItem[], platforms: PlatformConfig[], memos: DailyMemo[], setSales: any, darkMode: boolean }> = ({ sales, expenses, menuItems, platforms, memos, setSales, darkMode }) => {
-  const [timeUnit, setTimeUnit] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
-  const [searchDate, setSearchDate] = useState(new Date().toISOString().split('T')[0]);
+  const [timeUnit, setTimeUnit] = useState<'daily' | 'monthly'>('monthly');
+  const [searchDate, setSearchDate] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD
+  const [searchMonth, setSearchMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
 
   const getMName = (id: string) => menuItems.find(m => m.id === id)?.name || id;
 
@@ -299,24 +297,16 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
     const fixed = expenses.filter(e => e.type === 'fixed').reduce((acc, curr) => acc + curr.value, 0);
     const vRate = expenses.filter(e => e.type === 'percent').reduce((acc, curr) => acc + (curr.value / 100), 0);
 
+    // 차트는 전체 흐름을 보여줌 (최근 12개 기간)
     sales.forEach(s => {
       const d = new Date(s.date);
       let key = ''; let label = '';
       if (timeUnit === 'daily') { 
         key = s.date.split('T')[0]; 
         label = key.slice(5); 
-      } else if (timeUnit === 'weekly') {
-        const firstDayOfYear = new Date(d.getFullYear(), 0, 1);
-        const pastDaysOfYear = (d.getTime() - firstDayOfYear.getTime()) / 86400000;
-        const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-        key = `${d.getFullYear()}-W${weekNum}`;
-        label = `${weekNum}주`;
-      } else if (timeUnit === 'monthly') { 
-        key = `${d.getFullYear()}-${d.getMonth()+1}`; 
-        label = `${d.getMonth()+1}월`; 
       } else { 
-        key = `${d.getFullYear()}`; 
-        label = `${key}년`; 
+        key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, '0')}`; 
+        label = `${d.getMonth()+1}월`; 
       }
       if (!map[key]) map[key] = { label, revenue: 0, settlement: 0, profit: 0 };
       map[key].revenue += s.totalPrice;
@@ -324,7 +314,7 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
     });
 
     return Object.entries(map).sort(([a],[b]) => a.localeCompare(b)).map(([_, v]) => {
-      let fCost = timeUnit === 'daily' ? fixed/30 : timeUnit === 'weekly' ? fixed/4.3 : timeUnit === 'monthly' ? fixed : fixed*12;
+      let fCost = timeUnit === 'daily' ? fixed/30 : fixed;
       return { ...v, profit: v.settlement - (v.revenue * vRate) - fCost };
     }).slice(-12);
   }, [sales, expenses, timeUnit]);
@@ -332,15 +322,11 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
   const menuRanking = useMemo(() => {
     const map: Record<string, { name: string, qty: number, revenue: number }> = {};
     let targetSales = sales;
-    const sD = new Date(searchDate);
 
     if (timeUnit === 'daily') {
-      targetSales = sales.filter(s => new Date(s.date).toDateString() === sD.toDateString());
-    } else if (timeUnit === 'monthly') {
-      targetSales = sales.filter(s => {
-        const d = new Date(s.date);
-        return d.getFullYear() === sD.getFullYear() && d.getMonth() === sD.getMonth();
-      });
+      targetSales = sales.filter(s => s.date.startsWith(searchDate));
+    } else {
+      targetSales = sales.filter(s => s.date.startsWith(searchMonth));
     }
     
     targetSales.forEach(s => {
@@ -350,7 +336,7 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
     });
 
     return Object.values(map).sort((a, b) => b.revenue - a.revenue);
-  }, [sales, searchDate, timeUnit, menuItems]);
+  }, [sales, searchDate, searchMonth, timeUnit, menuItems]);
 
   return (
     <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
@@ -359,27 +345,32 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
         <div className={`flex p-1.5 rounded-2xl ${darkMode ? 'bg-[#1C1C1E]' : 'bg-gray-200'}`}>
           {(['daily', 'monthly'] as const).map(u => (
             <button key={u} onClick={() => setTimeUnit(u)} className={`px-6 py-2 rounded-xl text-[11px] font-bold transition-all ${timeUnit === u ? 'bg-[#448AFF] text-white shadow-md' : 'text-gray-500'}`}>
-              {u === 'daily' ? '일간' : '월간'}
+              {u === 'daily' ? '일간 분석' : '월간 분석'}
             </button>
           ))}
         </div>
       </header>
 
-      <div className="apple-card p-6 md:p-8 space-y-8">
-        <div className="flex justify-between items-center">
-          <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">기준 일자 선택</h3>
+      <div className="apple-card p-6 md:p-8 space-y-8 border-t-4 border-[#448AFF]">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-black uppercase tracking-widest text-gray-500">
+              {timeUnit === 'monthly' ? '분석 대상 월 선택' : '분석 대상 일자 선택'}
+            </h3>
+            <p className="text-[10px] text-gray-400 font-bold">선택한 기간의 상세 성과가 하단에 표시됩니다.</p>
+          </div>
           <input 
-            type="date" 
-            value={searchDate} 
-            onChange={e => setSearchDate(e.target.value)}
-            className={`text-sm font-bold p-3 rounded-2xl border-none outline-none transition-all ${darkMode ? 'bg-[#2C2C2E] text-white' : 'bg-gray-100 text-gray-900 focus:ring-2 ring-blue-500'}`}
+            type={timeUnit === 'monthly' ? 'month' : 'date'} 
+            value={timeUnit === 'monthly' ? searchMonth : searchDate} 
+            onChange={e => timeUnit === 'monthly' ? setSearchMonth(e.target.value) : setSearchDate(e.target.value)}
+            className={`text-sm font-black p-4 rounded-2xl border-none outline-none transition-all w-full md:w-auto text-center ${darkMode ? 'bg-[#2C2C2E] text-[#448AFF]' : 'bg-gray-100 text-[#448AFF] focus:ring-2 ring-blue-500'}`}
           />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="apple-card p-6 md:p-8">
-          <h3 className="text-xs font-black mb-8 uppercase tracking-widest text-gray-500">수익성 흐름 ({timeUnit})</h3>
+          <h3 className="text-xs font-black mb-8 uppercase tracking-widest text-gray-500">수익성 흐름 (최근 추이)</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={aggregated}>
@@ -395,10 +386,12 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
 
         <div className="apple-card p-6 md:p-8">
           <div className="flex justify-between items-center mb-8">
-            <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">메뉴별 성과 분석 ({timeUnit})</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-500">
+              {timeUnit === 'monthly' ? `${searchMonth.split('-')[1]}월` : `${searchDate.slice(5)}`} 메뉴 성과 분석
+            </h3>
           </div>
           <div className="space-y-4 max-h-[256px] overflow-y-auto no-scrollbar">
-            {menuRanking.map((m, idx) => (
+            {menuRanking.length > 0 ? menuRanking.map((m, idx) => (
               <div key={idx} className="flex items-center gap-4">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${idx === 0 ? 'bg-amber-400 text-white' : darkMode ? 'bg-white/5 text-gray-500' : 'bg-gray-100 text-gray-400'}`}>
                   {idx + 1}
@@ -417,7 +410,9 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
                 </div>
                 <div className="text-[10px] font-black text-gray-500 whitespace-nowrap">{m.qty}개</div>
               </div>
-            ))}
+            )) : (
+              <div className="py-10 text-center text-gray-500 text-xs font-bold">해당 기간의 판매 데이터가 없습니다.</div>
+            )}
           </div>
         </div>
       </div>
@@ -452,7 +447,6 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
 
   const [isFinishing, setIsFinishing] = useState(false);
   const [memoSaved, setMemoSaved] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     localStorage.setItem(storageKeys.TEMP_FORM, JSON.stringify(formData));
