@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import * as XLSX from 'xlsx';
 import { MenuItem, PlatformConfig, SaleRecord, ExpenseItem, DailyMemo } from './types';
 
 const DEFAULT_PLATFORMS: PlatformConfig[] = [
@@ -141,7 +142,6 @@ const App: React.FC = () => {
     };
     
     setInternalBackups(prev => {
-      // 최신 10개만 유지하여 용량 관리 (Rolling Backup)
       const updated = [newBackup, ...prev];
       return updated.slice(0, 10);
     });
@@ -150,7 +150,6 @@ const App: React.FC = () => {
   const handleBulkAddSales = (records: SaleRecord[]) => {
     const updatedSales = [...records, ...sales];
     setSales(updatedSales);
-    // 정산 마감 시 자동 백업 실행
     triggerAutoBackup(updatedSales);
   };
 
@@ -475,6 +474,7 @@ const StatCard: React.FC<{ label: string; value: number; color: string; darkMode
 const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], platforms: PlatformConfig[], memos: DailyMemo[], onFinalSubmit: (records: SaleRecord[]) => void, onSaveMemo: (date: string, content: string) => void, darkMode: boolean, storageKeys: any, stats: any }> = ({ sales, menuItems, platforms, memos, onFinalSubmit, onSaveMemo, darkMode, storageKeys, stats }) => {
   const [platform, setPlatform] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const excelInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState<Record<string, { qty: string, price: string }>>(() => {
     const saved = localStorage.getItem(storageKeys.TEMP_FORM);
@@ -513,6 +513,82 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
 
   const getPName = (id: string) => platforms.find(p => p.id === id)?.name || id;
   const getMName = (id: string) => menuItems.find(m => m.id === id)?.name || id;
+
+  const downloadExcelTemplate = () => {
+    const headers = [['날짜', '플랫폼', '메뉴', '수량', '총금액']];
+    const sampleData = [
+      ['2024-01-01', '배민', '닭강정', 2, 45000],
+      ['2024-01-01', '매장', '국밥', 1, 12000]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([...headers, ...sampleData]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "업로드양식");
+    XLSX.writeFile(wb, "경희장부_업로드양식.xlsx");
+  };
+
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+
+        const newRecords: SaleRecord[] = [];
+        data.forEach((row: any) => {
+          const rowDate = row['날짜'] || row['Date'];
+          const rowPlatform = row['플랫폼'] || row['Platform'];
+          const rowMenu = row['메뉴'] || row['Menu'];
+          const rowQty = Number(row['수량'] || row['Quantity'] || 0);
+          const rowPrice = Number(row['총금액'] || row['Total'] || row['Price'] || 0);
+
+          if (!rowPlatform || !rowMenu || rowQty <= 0) return;
+
+          const targetPlatform = platforms.find(p => p.name.includes(String(rowPlatform)) || String(rowPlatform).includes(p.name));
+          const targetMenu = menuItems.find(m => m.name === String(rowMenu));
+
+          if (targetPlatform && targetMenu) {
+            const totalFeePercent = (targetPlatform.feePercent || 0) + (targetPlatform.adjustmentPercent || 0);
+            const commission = rowPrice * (totalFeePercent / 100);
+            const settlementAmount = rowPrice - commission;
+            
+            let finalDate = new Date().toISOString();
+            if (rowDate) {
+              const d = new Date(rowDate);
+              if (!isNaN(d.getTime())) finalDate = d.toISOString();
+            }
+
+            newRecords.push({
+              id: crypto.randomUUID(),
+              date: finalDate,
+              platformId: targetPlatform.id,
+              menuId: targetMenu.id,
+              quantity: rowQty,
+              totalPrice: rowPrice,
+              settlementAmount: settlementAmount,
+              netProfit: settlementAmount,
+            });
+          }
+        });
+
+        if (newRecords.length > 0) {
+          setTempQueue(prev => [...prev, ...newRecords]);
+          alert(`${newRecords.length}개의 데이터를 불러왔습니다.`);
+        } else {
+          alert('가져올 수 있는 데이터가 없습니다. 양식을 확인해주세요.');
+        }
+      } catch (err) {
+        alert('엑셀 파일 읽기 오류가 발생했습니다.');
+      }
+      if (excelInputRef.current) excelInputRef.current.value = '';
+    };
+    reader.readAsBinaryString(file);
+  };
 
   const addToQueue = () => {
     const targetPlatform = platforms.find(p => p.id === platform);
@@ -575,6 +651,15 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
     <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-700 pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-3xl font-black">판매 실적 입력</h2>
+        <div className="flex gap-2">
+           <button onClick={downloadExcelTemplate} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${darkMode ? 'bg-white/5 text-gray-400 hover:bg-white/10' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+             <i className="fas fa-download mr-2"></i> 양식 다운로드
+           </button>
+           <input type="file" accept=".xlsx, .xls" ref={excelInputRef} onChange={handleExcelUpload} className="hidden" />
+           <button onClick={() => excelInputRef.current?.click()} className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-[#448AFF]/10 text-[#448AFF] hover:bg-[#448AFF]/20">
+             <i className="fas fa-file-excel mr-2"></i> 엑셀 업로드
+           </button>
+        </div>
       </div>
 
       <div className={`p-6 rounded-[32px] border-t-4 border-indigo-500 transition-all ${darkMode ? 'bg-indigo-500/5' : 'bg-indigo-50'}`}>
@@ -633,11 +718,16 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
               {tempQueue.map(r => (
                 <div key={r.id} className={`flex justify-between items-center p-4 rounded-2xl ${darkMode ? 'bg-[#2C2C2E]/60' : 'bg-gray-50'}`}>
                   <div className="flex gap-4 items-center">
-                    <span className="text-[10px] font-black px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400">{getPName(r.platformId)}</span>
-                    <span className="text-sm font-bold">{getMName(r.menuId)}</span>
+                    <div className="flex flex-col">
+                       <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-400 w-fit">{getPName(r.platformId)}</span>
+                       <span className="text-sm font-bold mt-1">{getMName(r.menuId)}</span>
+                    </div>
                   </div>
                   <div className="flex gap-4 items-center">
-                    <span className="text-sm font-black">{r.totalPrice.toLocaleString()}원</span>
+                    <div className="text-right">
+                       <p className="text-sm font-black">{r.totalPrice.toLocaleString()}원</p>
+                       <p className="text-[9px] text-gray-500">{new Date(r.date).toLocaleDateString()}</p>
+                    </div>
                     <button onClick={() => removeFromQueue(r.id)} className="text-gray-600 hover:text-rose-500"><i className="fas fa-times"></i></button>
                   </div>
                 </div>
