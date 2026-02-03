@@ -71,8 +71,6 @@ const App: React.FC = () => {
   }, [menuItems, platforms, sales, expenses, memos, darkMode]);
 
   const statsSummary = useMemo(() => {
-    const totalRevenue = sales.reduce((acc, curr) => acc + curr.totalPrice, 0);
-    const totalSettlement = sales.reduce((acc, curr) => acc + curr.settlementAmount, 0);
     const fixedCosts = expenses.filter(e => e.type === 'fixed').reduce((acc, curr) => acc + curr.value, 0);
     const variableRate = expenses.filter(e => e.type === 'percent').reduce((acc, curr) => acc + (curr.value / 100), 0);
     
@@ -195,9 +193,9 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
       </div>
     </header>
 
-    {/* 상단 핵심 지표: 전월 총 매출, 당월 매출, 당월 정산, 당월 순익 */}
+    {/* 상단 핵심 지표 업데이트: 전월 누적 매출, 당월 매출, 당월 정산, 당월 순익 */}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-      <StatCard label={`전월(${stats.lastMonthName}월) 총 매출`} value={stats.lastMonthRevenue} color={darkMode ? "text-gray-400" : "text-gray-500"} darkMode={darkMode} />
+      <StatCard label={`전월(${stats.lastMonthName}월) 누적 매출`} value={stats.lastMonthRevenue} color={darkMode ? "text-gray-400" : "text-gray-500"} darkMode={darkMode} />
       <StatCard label={`당월(${stats.currentMonthName}월) 매출액`} value={stats.mtdRevenue} color={darkMode ? "text-[#82B1FF]" : "text-blue-600"} darkMode={darkMode} />
       <StatCard label={`당월(${stats.currentMonthName}월) 정산액`} value={stats.mtdSettlement} color={darkMode ? "text-indigo-300" : "text-indigo-600"} darkMode={darkMode} />
       <StatCard label={`당월(${stats.currentMonthName}월) 순이익`} value={stats.mtdProfit} color={darkMode ? "text-[#B9F6CA]" : "text-emerald-600"} darkMode={darkMode} />
@@ -227,19 +225,19 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
           </div>
         </div>
 
-        {/* 월간 요약 카드 */}
+        {/* 요약 카드 */}
         <div className={`p-6 rounded-[28px] border-l-8 border-indigo-500/30 flex justify-between items-center transition-all ${darkMode ? 'bg-indigo-500/5' : 'bg-indigo-50/50'}`}>
           <div>
             <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">PERFORMANCE SUMMARY</p>
-            <h4 className="text-sm font-bold text-gray-500">전월 대비 당월 매출 달성률을 확인하세요</h4>
+            <h4 className="text-sm font-bold text-gray-500">지난달 대비 이번 달 매출 달성 현황</h4>
           </div>
           <div className="flex gap-8 text-right">
             <div>
-              <p className="text-[10px] font-black text-gray-400">전월 총 매출</p>
+              <p className="text-[10px] font-black text-gray-400">지난달 최종</p>
               <p className="text-sm font-black">{stats.lastMonthRevenue.toLocaleString()}원</p>
             </div>
             <div>
-              <p className="text-[10px] font-black text-gray-400">당월 실시간</p>
+              <p className="text-[10px] font-black text-gray-400">이번달 현재</p>
               <p className="text-sm font-black text-indigo-500">{stats.mtdRevenue.toLocaleString()}원</p>
             </div>
           </div>
@@ -250,7 +248,7 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
         <div className="space-y-1">
           <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">MONTHLY PROGRESS</p>
           <h3 className="text-xl font-black">{stats.currentMonthName}월 목표 관리</h3>
-          <p className="text-[10px] text-gray-500 font-bold">1일부터 현재까지의 정산 누계</p>
+          <p className="text-[10px] text-gray-500 font-bold">1일부터 현재까지 자동 집계</p>
         </div>
         
         <div className="space-y-6 my-6">
@@ -275,7 +273,7 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
               style={{ width: `${Math.min(100, (new Date().getDate() / 31) * 100)}%` }}
             ></div>
           </div>
-          <p className="text-[9px] text-center text-gray-500 font-bold uppercase tracking-widest">{stats.currentMonthName}월 영업 {Math.round((new Date().getDate() / 31) * 100)}% 경과</p>
+          <p className="text-[9px] text-center text-gray-500 font-bold uppercase tracking-widest">{stats.currentMonthName}월 마감까지 {31 - new Date().getDate()}일 남음</p>
         </div>
       </div>
     </div>
@@ -640,7 +638,7 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
       <div className={`p-6 rounded-[32px] border-t-4 border-indigo-500 transition-all ${darkMode ? 'bg-indigo-500/5' : 'bg-indigo-50'}`}>
         <div className="flex justify-between items-center mb-4">
           <div className="space-y-1">
-            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{stats.currentMonthName}월 누적 현황</p>
+            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{stats.currentMonthName}월 실시간 집계</p>
             <h3 className="text-lg font-black">오늘까지 매출 합계 <span className="text-[10px] font-bold text-gray-400 ml-2">(1일 ~ {new Date().getDate()}일)</span></h3>
           </div>
           <div className="text-right">
