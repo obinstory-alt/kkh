@@ -75,24 +75,22 @@ const App: React.FC = () => {
     const totalSettlement = sales.reduce((acc, curr) => acc + curr.settlementAmount, 0);
     const fixedCosts = expenses.filter(e => e.type === 'fixed').reduce((acc, curr) => acc + curr.value, 0);
     const variableRate = expenses.filter(e => e.type === 'percent').reduce((acc, curr) => acc + (curr.value / 100), 0);
-    const totalCosts = fixedCosts + (totalRevenue * variableRate);
-    const totalProfit = totalSettlement - totalCosts;
-
+    
     const now = new Date();
     const currentYearMonth = now.toISOString().slice(0, 7); // YYYY-MM
     
-    // 이번 달 누적 (1일부터 오늘까지)
+    // 당월 누적 (1일부터 오늘까지)
     const monthSales = sales.filter(s => s.date.startsWith(currentYearMonth));
     const mtdRevenue = monthSales.reduce((acc, curr) => acc + curr.totalPrice, 0);
     const mtdSettlement = monthSales.reduce((acc, curr) => acc + curr.settlementAmount, 0);
+    // 당월 순이익 계산: 정산액 - 변동비 - (고정비/30 * 현재일자)
     const mtdProfit = mtdSettlement - (mtdRevenue * variableRate) - (fixedCosts / 30 * now.getDate());
 
-    // 지난 달 성과
+    // 전월 누적 매출 합계
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthYearMonth = lastMonthDate.toISOString().slice(0, 7);
     const lastMonthSales = sales.filter(s => s.date.startsWith(lastMonthYearMonth));
     const lastMonthRevenue = lastMonthSales.reduce((acc, curr) => acc + curr.totalPrice, 0);
-    const lastMonthSettlement = lastMonthSales.reduce((acc, curr) => acc + curr.settlementAmount, 0);
 
     const dailyDataMap: Record<string, { date: string, revenue: number, settlement: number }> = {};
     sales.forEach(s => {
@@ -104,9 +102,9 @@ const App: React.FC = () => {
     const trendData = Object.keys(dailyDataMap).sort().map(date => dailyDataMap[date]).slice(-7);
 
     return { 
-      totalRevenue, totalSettlement, totalProfit, totalCosts, trendData, 
+      trendData, 
       mtdRevenue, mtdSettlement, mtdProfit,
-      lastMonthRevenue, lastMonthSettlement,
+      lastMonthRevenue,
       currentMonthName: now.getMonth() + 1,
       lastMonthName: lastMonthDate.getMonth() + 1
     };
@@ -197,12 +195,12 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
       </div>
     </header>
 
-    {/* 상단 핵심 지표: 전월 매출, 당월 매출, 당월 정산, 당월 순익 */}
+    {/* 상단 핵심 지표: 전월 총 매출, 당월 매출, 당월 정산, 당월 순익 */}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-      <StatCard label={`${stats.lastMonthName}월 매출액`} value={stats.lastMonthRevenue} color={darkMode ? "text-gray-400" : "text-gray-600"} darkMode={darkMode} />
-      <StatCard label={`${stats.currentMonthName}월 매출액`} value={stats.mtdRevenue} color={darkMode ? "text-[#82B1FF]" : "text-blue-600"} darkMode={darkMode} />
-      <StatCard label={`${stats.currentMonthName}월 정산액`} value={stats.mtdSettlement} color={darkMode ? "text-indigo-300" : "text-indigo-600"} darkMode={darkMode} />
-      <StatCard label={`${stats.currentMonthName}월 순이익`} value={stats.mtdProfit} color={darkMode ? "text-[#B9F6CA]" : "text-emerald-600"} darkMode={darkMode} />
+      <StatCard label={`전월(${stats.lastMonthName}월) 총 매출`} value={stats.lastMonthRevenue} color={darkMode ? "text-gray-400" : "text-gray-500"} darkMode={darkMode} />
+      <StatCard label={`당월(${stats.currentMonthName}월) 매출액`} value={stats.mtdRevenue} color={darkMode ? "text-[#82B1FF]" : "text-blue-600"} darkMode={darkMode} />
+      <StatCard label={`당월(${stats.currentMonthName}월) 정산액`} value={stats.mtdSettlement} color={darkMode ? "text-indigo-300" : "text-indigo-600"} darkMode={darkMode} />
+      <StatCard label={`당월(${stats.currentMonthName}월) 순이익`} value={stats.mtdProfit} color={darkMode ? "text-[#B9F6CA]" : "text-emerald-600"} darkMode={darkMode} />
     </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -229,20 +227,20 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
           </div>
         </div>
 
-        {/* 지난달 마감 성과 요약 (보조 정보) */}
+        {/* 월간 요약 카드 */}
         <div className={`p-6 rounded-[28px] border-l-8 border-indigo-500/30 flex justify-between items-center transition-all ${darkMode ? 'bg-indigo-500/5' : 'bg-indigo-50/50'}`}>
           <div>
-            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">지난 {stats.lastMonthName}월 마감 리포트</p>
-            <h4 className="text-sm font-bold text-gray-500">전체 매출 대비 정산 요율 확인</h4>
+            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">PERFORMANCE SUMMARY</p>
+            <h4 className="text-sm font-bold text-gray-500">전월 대비 당월 매출 달성률을 확인하세요</h4>
           </div>
           <div className="flex gap-8 text-right">
             <div>
-              <p className="text-[10px] font-black text-gray-400">최종 매출</p>
+              <p className="text-[10px] font-black text-gray-400">전월 총 매출</p>
               <p className="text-sm font-black">{stats.lastMonthRevenue.toLocaleString()}원</p>
             </div>
             <div>
-              <p className="text-[10px] font-black text-gray-400">최종 정산</p>
-              <p className="text-sm font-black text-indigo-500">{stats.lastMonthSettlement.toLocaleString()}원</p>
+              <p className="text-[10px] font-black text-gray-400">당월 실시간</p>
+              <p className="text-sm font-black text-indigo-500">{stats.mtdRevenue.toLocaleString()}원</p>
             </div>
           </div>
         </div>
@@ -251,21 +249,21 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
       <div className="apple-card p-6 md:p-8 flex flex-col justify-between border-t-4 border-indigo-500">
         <div className="space-y-1">
           <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">MONTHLY PROGRESS</p>
-          <h3 className="text-xl font-black">{stats.currentMonthName}월 실시간 현황</h3>
-          <p className="text-[10px] text-gray-500 font-bold">1일부터 오늘까지 자동 집계</p>
+          <h3 className="text-xl font-black">{stats.currentMonthName}월 목표 관리</h3>
+          <p className="text-[10px] text-gray-500 font-bold">1일부터 현재까지의 정산 누계</p>
         </div>
         
         <div className="space-y-6 my-6">
           <div className="flex justify-between items-end">
-            <span className="text-xs font-bold text-gray-500">당월 매출</span>
+            <span className="text-xs font-bold text-gray-500">당월 누적 매출</span>
             <span className="text-lg font-black">{stats.mtdRevenue.toLocaleString()}원</span>
           </div>
           <div className="flex justify-between items-end">
-            <span className="text-xs font-bold text-gray-500">당월 정산</span>
+            <span className="text-xs font-bold text-gray-500">당월 누적 정산</span>
             <span className="text-lg font-black text-indigo-500">{stats.mtdSettlement.toLocaleString()}원</span>
           </div>
           <div className="flex justify-between items-end pt-4 border-t border-white/5">
-            <span className="text-xs font-bold text-gray-500">당월 순익</span>
+            <span className="text-xs font-bold text-gray-500">당월 예상 순익</span>
             <span className="text-xl font-black text-emerald-500">{Math.max(0, Math.round(stats.mtdProfit)).toLocaleString()}원</span>
           </div>
         </div>
@@ -277,7 +275,7 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
               style={{ width: `${Math.min(100, (new Date().getDate() / 31) * 100)}%` }}
             ></div>
           </div>
-          <p className="text-[9px] text-center text-gray-500 font-bold uppercase tracking-widest">{stats.currentMonthName}월 마감까지 약 {31 - new Date().getDate()}일 남음</p>
+          <p className="text-[9px] text-center text-gray-500 font-bold uppercase tracking-widest">{stats.currentMonthName}월 영업 {Math.round((new Date().getDate() / 31) * 100)}% 경과</p>
         </div>
       </div>
     </div>
@@ -290,9 +288,6 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
 
   const getPName = (id: string) => platforms.find(p => p.id === id)?.name || id;
   const getMName = (id: string) => menuItems.find(m => m.id === id)?.name || id;
-
-  const filteredSalesForDate = useMemo(() => sales.filter(s => s.date.startsWith(searchDate)), [sales, searchDate]);
-  const currentMemo = useMemo(() => memos.find(m => m.date === searchDate)?.content || '', [memos, searchDate]);
 
   const aggregated = useMemo(() => {
     const map: Record<string, { label: string, revenue: number, settlement: number, profit: number }> = {};
@@ -387,13 +382,6 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
             className={`text-sm font-bold p-3 rounded-2xl border-none outline-none transition-all ${darkMode ? 'bg-[#2C2C2E] text-white' : 'bg-gray-100 text-gray-900 focus:ring-2 ring-blue-500'}`}
           />
         </div>
-
-        {currentMemo && (
-          <div className={`p-6 rounded-3xl border-l-4 border-amber-400 ${darkMode ? 'bg-amber-400/5' : 'bg-amber-50'}`}>
-            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2"><i className="fas fa-sticky-note mr-1"></i> {searchDate} 메모</p>
-            <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">{currentMemo}</p>
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -652,12 +640,12 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
       <div className={`p-6 rounded-[32px] border-t-4 border-indigo-500 transition-all ${darkMode ? 'bg-indigo-500/5' : 'bg-indigo-50'}`}>
         <div className="flex justify-between items-center mb-4">
           <div className="space-y-1">
-            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{stats.currentMonthName}월 누적 집계</p>
-            <h3 className="text-lg font-black">이번 달 누적 합계 <span className="text-[10px] font-bold text-gray-400 ml-2">(1일 ~ {new Date().getDate()}일)</span></h3>
+            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{stats.currentMonthName}월 누적 현황</p>
+            <h3 className="text-lg font-black">오늘까지 매출 합계 <span className="text-[10px] font-bold text-gray-400 ml-2">(1일 ~ {new Date().getDate()}일)</span></h3>
           </div>
           <div className="text-right">
              <p className="text-xl font-black text-indigo-600">{stats.mtdRevenue.toLocaleString()}원</p>
-             <p className="text-[10px] font-bold text-gray-500">정산 예정: {stats.mtdSettlement.toLocaleString()}원</p>
+             <p className="text-[10px] font-bold text-gray-500">예상 정산: {stats.mtdSettlement.toLocaleString()}원</p>
           </div>
         </div>
         <div className="w-full h-1.5 bg-gray-200 dark:bg-white/5 rounded-full overflow-hidden">
@@ -735,40 +723,6 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
           <div className="py-6 text-center">
             <p className="text-sm font-bold text-gray-600">입력된 대기 내역이 없습니다.</p>
           </div>
-        )}
-      </div>
-
-      <div className="apple-card p-6 md:p-8 space-y-6 border-t-4 border-indigo-500 bg-indigo-500/5">
-        <div className="flex justify-between items-center">
-          <div className="space-y-1">
-            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">CONSOLIDATED REPORT</p>
-            <h3 className="text-lg font-black">{date} 통합 집계</h3>
-          </div>
-        </div>
-        
-        {consolidatedReportForDate.length > 0 ? (
-          <div className="space-y-3">
-            <div className="divide-y divide-indigo-500/10">
-              {consolidatedReportForDate.map((m, idx) => (
-                <div key={idx} className="flex justify-between py-4 group hover:bg-indigo-500/5 rounded-xl transition-colors px-2">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black ${idx === 0 ? 'bg-indigo-500 text-white' : 'bg-gray-200 dark:bg-white/10 text-gray-500'}`}>
-                      {idx + 1}
-                    </div>
-                    <span className="text-sm font-bold">{m.name}</span>
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600">x{m.qty}</span>
-                  </div>
-                  <span className="font-black text-sm text-indigo-600">{m.total.toLocaleString()}원</span>
-                </div>
-              ))}
-            </div>
-            <div className="pt-4 border-t border-indigo-500/20 flex justify-between items-center">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">TOTAL SALES</span>
-              <span className="text-xl font-black text-indigo-600">{consolidatedReportForDate.reduce((acc, c) => acc + c.total, 0).toLocaleString()}원</span>
-            </div>
-          </div>
-        ) : (
-          <div className="py-10 text-center text-xs font-bold text-gray-400 italic">기록된 매출이 없습니다.</div>
         )}
       </div>
 
