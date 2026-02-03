@@ -17,6 +17,12 @@ const INITIAL_MENU: MenuItem[] = [
   { id: 'menu-3', name: '냉면', costPercent: 0 },
 ];
 
+interface InternalBackup {
+  id: string;
+  timestamp: string;
+  data: string; // JSON string
+}
+
 const App: React.FC = () => {
   const STORAGE_KEYS = {
     MENU: 'biz_total_v18_menu',
@@ -27,7 +33,8 @@ const App: React.FC = () => {
     THEME: 'biz_total_v18_theme',
     TEMP_FORM: 'biz_total_v18_temp_form',
     TEMP_QUEUE: 'biz_total_v18_temp_queue',
-    TEMP_MEMO: 'biz_total_v18_temp_memo'
+    TEMP_MEMO: 'biz_total_v18_temp_memo',
+    BACKUPS: 'biz_total_v18_internal_backups'
   };
 
   const [view, setView] = useState<'dashboard' | 'sales' | 'stats' | 'settings'>('dashboard');
@@ -36,6 +43,7 @@ const App: React.FC = () => {
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [memos, setMemos] = useState<DailyMemo[]>([]);
+  const [internalBackups, setInternalBackups] = useState<InternalBackup[]>([]);
   
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
@@ -48,12 +56,14 @@ const App: React.FC = () => {
     const savedSales = localStorage.getItem(STORAGE_KEYS.SALES);
     const savedExpenses = localStorage.getItem(STORAGE_KEYS.EXPENSES);
     const savedMemos = localStorage.getItem(STORAGE_KEYS.MEMOS);
+    const savedBackups = localStorage.getItem(STORAGE_KEYS.BACKUPS);
 
     setMenuItems(savedMenu ? JSON.parse(savedMenu) : INITIAL_MENU);
     setPlatforms(savedPlatforms ? JSON.parse(savedPlatforms) : DEFAULT_PLATFORMS);
     setSales(savedSales ? JSON.parse(savedSales) : []);
     setExpenses(savedExpenses ? JSON.parse(savedExpenses) : []);
     setMemos(savedMemos ? JSON.parse(savedMemos) : []);
+    setInternalBackups(savedBackups ? JSON.parse(savedBackups) : []);
   }, []);
 
   useEffect(() => {
@@ -62,13 +72,14 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.SALES, JSON.stringify(sales));
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
     localStorage.setItem(STORAGE_KEYS.MEMOS, JSON.stringify(memos));
+    localStorage.setItem(STORAGE_KEYS.BACKUPS, JSON.stringify(internalBackups));
     localStorage.setItem(STORAGE_KEYS.THEME, darkMode ? 'dark' : 'light');
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, [menuItems, platforms, sales, expenses, memos, darkMode]);
+  }, [menuItems, platforms, sales, expenses, memos, internalBackups, darkMode]);
 
   const statsSummary = useMemo(() => {
     const fixedCosts = expenses.filter(e => e.type === 'fixed').reduce((acc, curr) => acc + curr.value, 0);
@@ -115,8 +126,32 @@ const App: React.FC = () => {
     };
   }, [sales, expenses]);
 
+  const triggerAutoBackup = (newSales?: SaleRecord[]) => {
+    const currentData = {
+      menu: menuItems,
+      platforms,
+      sales: newSales || sales,
+      expenses,
+      memos
+    };
+    const newBackup: InternalBackup = {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      data: JSON.stringify(currentData)
+    };
+    
+    setInternalBackups(prev => {
+      // 최신 10개만 유지하여 용량 관리 (Rolling Backup)
+      const updated = [newBackup, ...prev];
+      return updated.slice(0, 10);
+    });
+  };
+
   const handleBulkAddSales = (records: SaleRecord[]) => {
-    setSales(prev => [...records, ...prev]);
+    const updatedSales = [...records, ...sales];
+    setSales(updatedSales);
+    // 정산 마감 시 자동 백업 실행
+    triggerAutoBackup(updatedSales);
   };
 
   const handleSaveMemo = (date: string, content: string) => {
@@ -125,6 +160,37 @@ const App: React.FC = () => {
       if (!content.trim()) return filtered;
       return [...filtered, { date, content }];
     });
+  };
+
+  const handleRestoreFromInternal = (backup: InternalBackup) => {
+    if (confirm(`${new Date(backup.timestamp).toLocaleString()} 버전으로 데이터를 복원하시겠습니까?\n현재 데이터가 모두 교체됩니다.`)) {
+      try {
+        const parsed = JSON.parse(backup.data);
+        if (parsed.menu) setMenuItems(parsed.menu);
+        if (parsed.platforms) setPlatforms(parsed.platforms);
+        if (parsed.sales) setSales(parsed.sales);
+        if (parsed.expenses) setExpenses(parsed.expenses);
+        if (parsed.memos) setMemos(parsed.memos);
+        alert('데이터 복원이 완료되었습니다.');
+      } catch (e) {
+        alert('복원에 실패했습니다.');
+      }
+    }
+  };
+
+  const handleDeleteBackup = (id: string) => {
+    if (confirm('해당 백업을 삭제하시겠습니까?')) {
+      setInternalBackups(prev => prev.filter(b => b.id !== id));
+    }
+  };
+
+  const handleResetAll = () => {
+    if (confirm('⚠️ 경고: 모든 판매 데이터와 설정이 초기화됩니다. 계속하시겠습니까?')) {
+      if (confirm('정말로 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+        localStorage.clear();
+        window.location.reload();
+      }
+    }
   };
 
   const handleBackup = () => {
@@ -145,7 +211,7 @@ const App: React.FC = () => {
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
-        if (confirm('데이터를 복원하시겠습니까?')) {
+        if (confirm('파일로부터 데이터를 복원하시겠습니까?')) {
           if (data.menu) setMenuItems(data.menu);
           if (data.platforms) setPlatforms(data.platforms);
           if (data.sales) setSales(data.sales);
@@ -178,7 +244,19 @@ const App: React.FC = () => {
         {view === 'dashboard' && <Dashboard stats={statsSummary} darkMode={darkMode} />}
         {view === 'sales' && <SalesBulkInput sales={sales} menuItems={menuItems} platforms={platforms} memos={memos} onFinalSubmit={handleBulkAddSales} onSaveMemo={handleSaveMemo} darkMode={darkMode} storageKeys={STORAGE_KEYS} stats={statsSummary} />}
         {view === 'stats' && <AdvancedStats sales={sales} expenses={expenses} menuItems={menuItems} platforms={platforms} memos={memos} setSales={setSales} darkMode={darkMode} />}
-        {view === 'settings' && <Settings menuItems={menuItems} setMenuItems={setMenuItems} platforms={platforms} setPlatforms={setPlatforms} expenses={expenses} setExpenses={setExpenses} darkMode={darkMode} setDarkMode={setDarkMode} onBackup={handleBackup} onRestore={handleRestore} />}
+        {view === 'settings' && (
+          <Settings 
+            menuItems={menuItems} setMenuItems={setMenuItems} 
+            platforms={platforms} setPlatforms={setPlatforms} 
+            expenses={expenses} setExpenses={setExpenses} 
+            internalBackups={internalBackups}
+            onRestoreInternal={handleRestoreFromInternal}
+            onDeleteBackup={handleDeleteBackup}
+            darkMode={darkMode} setDarkMode={setDarkMode} 
+            onBackup={handleBackup} onRestore={handleRestore}
+            onResetAll={handleResetAll}
+          />
+        )}
       </main>
     </div>
   );
@@ -230,23 +308,6 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
             </ResponsiveContainer>
           </div>
         </div>
-
-        <div className={`p-6 rounded-[28px] border-l-8 border-indigo-500/30 flex justify-between items-center transition-all ${darkMode ? 'bg-indigo-500/5' : 'bg-indigo-50/50'}`}>
-          <div>
-            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">PERFORMANCE SUMMARY</p>
-            <h4 className="text-sm font-bold text-gray-500">{stats.lastMonthName}월 대비 {stats.currentMonthName}월 매출 달성 현황</h4>
-          </div>
-          <div className="flex gap-8 text-right">
-            <div>
-              <p className="text-[10px] font-black text-gray-400">전월 총합</p>
-              <p className="text-sm font-black">{stats.lastMonthRevenue.toLocaleString()}원</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-black text-gray-400">당월 실시간</p>
-              <p className="text-sm font-black text-indigo-500">{stats.mtdRevenue.toLocaleString()}원</p>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="apple-card p-6 md:p-8 flex flex-col justify-between border-t-4 border-indigo-500">
@@ -261,24 +322,10 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
             <span className="text-xs font-bold text-gray-500">누적 매출액</span>
             <span className="text-lg font-black">{stats.mtdRevenue.toLocaleString()}원</span>
           </div>
-          <div className="flex justify-between items-end">
-            <span className="text-xs font-bold text-gray-500">입금 정산액</span>
-            <span className="text-lg font-black text-indigo-500">{stats.mtdSettlement.toLocaleString()}원</span>
-          </div>
           <div className="flex justify-between items-end pt-4 border-t border-white/5">
             <span className="text-xs font-bold text-gray-500">예상 순수익</span>
             <span className="text-xl font-black text-emerald-500">{Math.max(0, Math.round(stats.mtdProfit)).toLocaleString()}원</span>
           </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="w-full h-2 bg-gray-200 dark:bg-white/5 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-indigo-500 rounded-full transition-all duration-1000" 
-              style={{ width: `${Math.min(100, (new Date().getDate() / 31) * 100)}%` }}
-            ></div>
-          </div>
-          <p className="text-[9px] text-center text-gray-500 font-bold uppercase tracking-widest">{stats.currentMonthName}월 영업 {Math.round((new Date().getDate() / 31) * 100)}% 경과</p>
         </div>
       </div>
     </div>
@@ -287,8 +334,8 @@ const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMod
 
 const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], menuItems: MenuItem[], platforms: PlatformConfig[], memos: DailyMemo[], setSales: any, darkMode: boolean }> = ({ sales, expenses, menuItems, platforms, memos, setSales, darkMode }) => {
   const [timeUnit, setTimeUnit] = useState<'daily' | 'monthly'>('monthly');
-  const [searchDate, setSearchDate] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD
-  const [searchMonth, setSearchMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [searchDate, setSearchDate] = useState(new Date().toISOString().split('T')[0]);
+  const [searchMonth, setSearchMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const getMName = (id: string) => menuItems.find(m => m.id === id)?.name || id;
 
@@ -297,7 +344,6 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
     const fixed = expenses.filter(e => e.type === 'fixed').reduce((acc, curr) => acc + curr.value, 0);
     const vRate = expenses.filter(e => e.type === 'percent').reduce((acc, curr) => acc + (curr.value / 100), 0);
 
-    // 차트는 전체 흐름을 보여줌 (최근 12개 기간)
     sales.forEach(s => {
       const d = new Date(s.date);
       let key = ''; let label = '';
@@ -357,7 +403,6 @@ const AdvancedStats: React.FC<{ sales: SaleRecord[], expenses: ExpenseItem[], me
             <h3 className="text-sm font-black uppercase tracking-widest text-gray-500">
               {timeUnit === 'monthly' ? '분석 대상 월 선택' : '분석 대상 일자 선택'}
             </h3>
-            <p className="text-[10px] text-gray-400 font-bold">선택한 기간의 상세 성과가 하단에 표시됩니다.</p>
           </div>
           <input 
             type={timeUnit === 'monthly' ? 'month' : 'date'} 
@@ -506,14 +551,6 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
     setTempQueue(prev => prev.filter(r => r.id !== id));
   };
 
-  const clearAllTempData = () => {
-    if (confirm('입력 중인 모든 데이터를 초기화하시겠습니까?')) {
-      setFormData({});
-      setTempQueue([]);
-      setMemoContent('');
-    }
-  };
-
   const submitFinal = () => {
     if (tempQueue.length === 0) return;
     setIsFinishing(true);
@@ -524,7 +561,7 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
       localStorage.removeItem(storageKeys.TEMP_FORM);
       localStorage.removeItem(storageKeys.TEMP_QUEUE);
       setIsFinishing(false);
-      alert('정산 마감이 완료되었습니다!');
+      alert('정산이 마감되었습니다. (자동 백업 완료)');
     }, 800);
   };
 
@@ -538,7 +575,6 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
     <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-700 pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-3xl font-black">판매 실적 입력</h2>
-        <button onClick={clearAllTempData} className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-rose-500/10 text-rose-500 hover:bg-rose-500/20">초기화</button>
       </div>
 
       <div className={`p-6 rounded-[32px] border-t-4 border-indigo-500 transition-all ${darkMode ? 'bg-indigo-500/5' : 'bg-indigo-50'}`}>
@@ -635,8 +671,8 @@ const SalesBulkInput: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
   );
 };
 
-const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: PlatformConfig[], setPlatforms: any, expenses: ExpenseItem[], setExpenses: any, darkMode: boolean, setDarkMode: any, onBackup: () => void, onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void }> = ({ menuItems, setMenuItems, platforms, setPlatforms, expenses, setExpenses, darkMode, setDarkMode, onBackup, onRestore }) => {
-  const [tab, setTab] = useState<'menu' | 'platform' | 'expense'>('menu');
+const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: PlatformConfig[], setPlatforms: any, expenses: ExpenseItem[], setExpenses: any, internalBackups: InternalBackup[], onRestoreInternal: (b: InternalBackup) => void, onDeleteBackup: (id: string) => void, darkMode: boolean, setDarkMode: any, onBackup: () => void, onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void, onResetAll: () => void }> = ({ menuItems, setMenuItems, platforms, setPlatforms, expenses, setExpenses, internalBackups, onRestoreInternal, onDeleteBackup, darkMode, setDarkMode, onBackup, onRestore, onResetAll }) => {
+  const [tab, setTab] = useState<'menu' | 'platform' | 'expense' | 'backup'>('menu');
   const [show, setShow] = useState(false);
   const [name, setName] = useState('');
   const [v1, setV1] = useState('0');
@@ -646,21 +682,46 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
     if (!name) return;
     if (tab === 'menu') setMenuItems([...menuItems, { id: crypto.randomUUID(), name, costPercent: 0 }]);
     else if (tab === 'platform') setPlatforms([...platforms, { id: crypto.randomUUID(), name, feePercent: Number(v1), adjustmentPercent: 0 }]);
-    else setExpenses([...expenses, { id: crypto.randomUUID(), name, value: Number(v1), type }]);
+    else if (tab === 'expense') setExpenses([...expenses, { id: crypto.randomUUID(), name, value: Number(v1), type }]);
     setShow(false); setName(''); setV1('0');
   };
 
   return (
-    <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700 pb-20">
       <h2 className="text-3xl font-black">비즈니스 설정</h2>
-      <div className={`flex p-1.5 rounded-2xl ${darkMode ? 'bg-[#1C1C1E]' : 'bg-gray-200'}`}>
-        {(['menu', 'platform', 'expense'] as const).map(t => (
-          <button key={t} onClick={()=>setTab(t)} className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${tab === t ? 'bg-[#448AFF] text-white shadow-md' : 'text-gray-500'}`}>{t==='menu'?'메뉴':t==='platform'?'플랫폼':'지출'}</button>
+      <div className={`flex p-1.5 rounded-2xl overflow-x-auto no-scrollbar ${darkMode ? 'bg-[#1C1C1E]' : 'bg-gray-200'}`}>
+        {(['menu', 'platform', 'expense', 'backup'] as const).map(t => (
+          <button key={t} onClick={()=>setTab(t)} className={`flex-1 min-w-[80px] py-3 rounded-xl font-bold text-xs transition-all ${tab === t ? 'bg-[#448AFF] text-white shadow-md' : 'text-gray-500'}`}>
+            {t==='menu'?'메뉴':t==='platform'?'플랫폼':t==='expense'?'지출':'백업'}
+          </button>
         ))}
       </div>
       
       <div className="apple-card p-6 md:p-8 min-h-[400px]">
-        {show ? (
+        {tab === 'backup' ? (
+          <div className="space-y-6">
+            <div className="space-y-1">
+              <h4 className="font-black text-lg">로컬 자동 백업 관리</h4>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">최근 10일치 정산 내역이 보존됩니다.</p>
+            </div>
+            <div className="space-y-3">
+              {internalBackups.length > 0 ? internalBackups.map(b => (
+                <div key={b.id} className={`flex justify-between items-center p-4 rounded-2xl ${darkMode ? 'bg-[#2C2C2E]/50' : 'bg-gray-50'}`}>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold">{new Date(b.timestamp).toLocaleString('ko-KR')}</p>
+                    <p className="text-[9px] text-gray-500 font-black">Rolling Archive</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => onRestoreInternal(b)} className="px-3 py-2 rounded-xl text-[10px] font-black bg-blue-500/10 text-blue-500">복구</button>
+                    <button onClick={() => onDeleteBackup(b.id)} className="px-3 py-2 rounded-xl text-[10px] font-black bg-rose-500/10 text-rose-500">삭제</button>
+                  </div>
+                </div>
+              )) : (
+                <div className="py-10 text-center text-gray-500 text-xs font-bold">백업 기록이 없습니다.</div>
+              )}
+            </div>
+          </div>
+        ) : show ? (
           <div className="space-y-8 max-w-sm mx-auto">
             <h4 className="font-black text-xl text-center">항목 추가</h4>
             <div className="space-y-6">
@@ -668,6 +729,7 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
               {(tab === 'platform' || tab === 'expense') && <input type="number" value={v1} onChange={e=>setV1(e.target.value)} placeholder="수치" className={`w-full p-5 rounded-2xl font-bold ${darkMode ? 'bg-[#2C2C2E]' : 'bg-gray-100'}`} />}
             </div>
             <button onClick={save} className="w-full py-5 bg-[#448AFF] text-white rounded-3xl font-black">저장</button>
+            <button onClick={()=>setShow(false)} className="w-full text-xs font-bold text-gray-500">취소</button>
           </div>
         ) : (
           <div className="space-y-6">
@@ -676,19 +738,19 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
               {tab === 'menu' && menuItems.map(m => (
                 <div key={m.id} className={`flex justify-between p-5 rounded-3xl ${darkMode ? 'bg-[#2C2C2E]/50' : 'bg-gray-50'}`}>
                   <span className="font-bold">{m.name}</span>
-                  <button onClick={()=>setMenuItems(menuItems.filter(i=>i.id!==m.id))} className="text-rose-500">삭제</button>
+                  <button onClick={()=>confirm('삭제하시겠습니까?') && setMenuItems(menuItems.filter(i=>i.id!==m.id))} className="text-rose-500">삭제</button>
                 </div>
               ))}
               {tab === 'platform' && platforms.map(p => (
                 <div key={p.id} className={`flex justify-between p-5 rounded-3xl ${darkMode ? 'bg-[#2C2C2E]/50' : 'bg-gray-50'}`}>
                   <span className="font-bold">{p.name} ({p.feePercent}%)</span>
-                  <button onClick={()=>setPlatforms(platforms.filter(i=>i.id!==p.id))} className="text-rose-500">삭제</button>
+                  <button onClick={()=>confirm('삭제하시겠습니까?') && setPlatforms(platforms.filter(i=>i.id!==p.id))} className="text-rose-500">삭제</button>
                 </div>
               ))}
               {tab === 'expense' && expenses.map(e => (
                 <div key={e.id} className={`flex justify-between p-5 rounded-3xl ${darkMode ? 'bg-[#2C2C2E]/50' : 'bg-gray-50'}`}>
                   <span className="font-bold">{e.name} ({e.value.toLocaleString()}{e.type==='fixed'?'원':'%'})</span>
-                  <button onClick={()=>setExpenses(expenses.filter(i=>i.id!==e.id))} className="text-rose-500">삭제</button>
+                  <button onClick={()=>confirm('삭제하시겠습니까?') && setExpenses(expenses.filter(i=>i.id!==e.id))} className="text-rose-500">삭제</button>
                 </div>
               ))}
             </div>
@@ -696,9 +758,17 @@ const Settings: React.FC<{ menuItems: MenuItem[], setMenuItems: any, platforms: 
         )}
       </div>
 
-      <div className="flex gap-4">
-        <button onClick={()=>setDarkMode(!darkMode)} className="flex-1 py-4 bg-white/5 rounded-2xl font-bold">테마 전환</button>
-        <button onClick={onBackup} className="flex-1 py-4 bg-white/5 rounded-2xl font-bold">백업</button>
+      <div className="flex flex-col gap-4">
+        <div className="flex gap-4">
+          <button onClick={()=>setDarkMode(!darkMode)} className="flex-1 py-4 bg-white/5 rounded-2xl font-bold border border-white/5 shadow-sm transition-all active:scale-95">테마 전환</button>
+          <button onClick={onBackup} className="flex-1 py-4 bg-white/5 rounded-2xl font-bold border border-white/5 shadow-sm transition-all active:scale-95">전체 백업</button>
+        </div>
+        
+        <div className="pt-10 border-t border-white/5">
+           <button onClick={onResetAll} className="w-full py-4 text-xs font-black text-rose-500/50 hover:text-rose-500 transition-colors uppercase tracking-widest">
+             <i className="fas fa-triangle-exclamation mr-2"></i> 모든 데이터 초기화
+           </button>
+        </div>
       </div>
     </div>
   );
