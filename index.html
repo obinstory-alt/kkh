@@ -4,11 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- 캐시 방지 메타 태그 -->
+    <!-- 강력한 캐시 방지 메타 태그 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>경희장부 - 프리미엄 정산</title>
+    <title>경희장부 v19.5 - 프리미엄 정산</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -19,13 +19,15 @@
             --bg-surface: #ffffff;
             --text-primary: #1d1d1f;
             --text-secondary: #86868b;
+            --accent: #007AFF;
         }
 
         .dark {
             --bg-main: #000000;
-            --bg-surface: #1c1c1e;
+            --bg-surface: #121214;
             --text-primary: #f2f2f7;
             --text-secondary: #8e8e93;
+            --accent: #0A84FF;
         }
 
         body {
@@ -38,27 +40,21 @@
 
         .apple-card {
             background-color: var(--bg-surface);
-            border-radius: 24px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            border-radius: 28px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .dark .apple-card {
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.03);
         }
 
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
         .active-tab-glow {
-            box-shadow: 0 0 15px rgba(68, 138, 255, 0.3);
-        }
-
-        input[type="date"]::-webkit-calendar-picker-indicator {
-            filter: invert(0.5);
-        }
-        .dark input[type="date"]::-webkit-calendar-picker-indicator {
-            filter: invert(1);
+            box-shadow: 0 0 20px rgba(10, 132, 255, 0.4);
         }
     </style>
 <script type="importmap">
@@ -75,6 +71,7 @@
 </head>
 <body>
     <div id="root"></div>
-    <script type="module" src="index.tsx?v=19.4"></script>
+    <!-- 쿼리 스트링 v=19.5를 통해 브라우저 캐시 무력화 -->
+    <script type="module" src="index.tsx?v=19.5"></script>
 </body>
 </html>
