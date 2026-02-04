@@ -30,7 +30,7 @@ interface InternalBackup {
 const COLORS = ['#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE', '#5856D6', '#FF2D55'];
 
 const App: React.FC = () => {
-  const CURRENT_VERSION = 'v19.3';
+  const CURRENT_VERSION = 'v19.4';
   const STORAGE_PREFIX = 'biz_total_stable_';
   const STORAGE_KEYS = {
     MENU: `${STORAGE_PREFIX}menu`,
@@ -47,13 +47,17 @@ const App: React.FC = () => {
   const [internalBackups, setInternalBackups] = useState<InternalBackup[]>([]);
   const [darkMode, setDarkMode] = useState<boolean>(true);
 
+  // 로드 시 콘솔에 버전 출력 (디버깅용)
+  useEffect(() => {
+    console.log(`%c 경희장부 ${CURRENT_VERSION} 가동 중 `, 'background: #007AFF; color: #fff; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+  }, []);
+
   useEffect(() => {
     const migrateAndLoad = () => {
       let allSales: SaleRecord[] = [];
       let lastMenu = INITIAL_MENU;
       let lastPlat = DEFAULT_PLATFORMS;
 
-      // 이전 모든 버전 데이터 통합
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && (key.startsWith('biz_total_') || key.startsWith(STORAGE_PREFIX))) {
@@ -133,7 +137,7 @@ const App: React.FC = () => {
       </nav>
 
       <main className="p-4 md:p-8 max-w-5xl mx-auto">
-        {view === 'dashboard' && <Dashboard stats={dashboardStats} darkMode={darkMode} />}
+        {view === 'dashboard' && <Dashboard stats={dashboardStats} darkMode={darkMode} version={CURRENT_VERSION} />}
         {view === 'sales' && <SalesInputV17 menuItems={menuItems} platforms={platforms} onFinalSubmit={handleFinalSubmit} />}
         {view === 'stats' && <StatsContainer sales={sales} menuItems={menuItems} platforms={platforms} darkMode={darkMode} />}
         {view === 'settings' && (
@@ -142,6 +146,7 @@ const App: React.FC = () => {
             onRestore={(b) => { const p = JSON.parse(b.data); if(p.sales) setSales(p.sales); alert('복원되었습니다.'); }} 
             darkMode={darkMode} setDarkMode={setDarkMode}
             onReset={() => { if(confirm('모든 데이터를 초기화할까요?')) { localStorage.clear(); window.location.reload(); } }}
+            version={CURRENT_VERSION}
           />
         )}
       </main>
@@ -156,8 +161,12 @@ const NavItem: React.FC<{ active: boolean; onClick: () => void; icon: string; la
   </button>
 );
 
-const Dashboard: React.FC<{ stats: any, darkMode: boolean }> = ({ stats, darkMode }) => (
+const Dashboard: React.FC<{ stats: any, darkMode: boolean, version: string }> = ({ stats, darkMode, version }) => (
   <div className="space-y-6 animate-in fade-in duration-700">
+    <div className="flex justify-between items-end mb-2">
+      <h2 className="text-sm font-black text-gray-500 uppercase tracking-widest">실시간 현황</h2>
+      <span className="text-[10px] font-bold text-blue-500/50">{version} STABLE</span>
+    </div>
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <StatCard label={`${stats.lastMonthName}월 전월 매출`} value={stats.lastMonthRevenue} color="text-gray-500" />
       <StatCard label={`${stats.curMonthName}월 당월 매출`} value={stats.mtdRevenue} color="text-blue-500" />
@@ -183,7 +192,6 @@ const StatCard: React.FC<{ label: string; value: number; color: string }> = ({ l
   </div>
 );
 
-// --- 2단계 판매 입력 (엑셀 기능 강화) ---
 const SalesInputV17: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig[], onFinalSubmit: (r: SaleRecord[]) => void }> = ({ menuItems, platforms, onFinalSubmit }) => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [platform, setPlatform] = useState('');
@@ -309,7 +317,6 @@ const SalesInputV17: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig
   );
 };
 
-// --- 다차원 심층 분석 (일/월/연별 통계) ---
 const StatsContainer: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], platforms: PlatformConfig[], darkMode: boolean }> = ({ sales, menuItems, platforms, darkMode }) => {
   const [tab, setTab] = useState<'time' | 'menu' | 'platform'>('time');
   const [timeUnit, setTimeUnit] = useState<'day' | 'month' | 'year'>('day');
@@ -441,30 +448,52 @@ const StatsContainer: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], pla
   );
 };
 
-const Settings: React.FC<{ internalBackups: InternalBackup[], onRestore: (b: InternalBackup) => void, darkMode: boolean, setDarkMode: any, onReset: () => void }> = ({ internalBackups, onRestore, darkMode, setDarkMode, onReset }) => (
-  <div className="max-w-xl mx-auto space-y-8 animate-in fade-in duration-500">
-    <div className="flex justify-between items-center">
-      <h2 className="text-2xl font-black italic">설정 / 타임머신</h2>
-      <button onClick={()=>setDarkMode(!darkMode)} className="p-4 bg-white/5 rounded-2xl text-xs font-bold border border-white/10 hover:bg-white/10 transition-colors">
-        {darkMode ? '🌙 다크 모드 ON' : '☀️ 라이트 모드 ON'}
-      </button>
-    </div>
-    <div className="apple-card p-6 space-y-6">
-      <h3 className="text-sm font-black text-blue-500">자동 타임머신 복구</h3>
-      <p className="text-[11px] text-gray-500 leading-relaxed font-bold">판매 입력을 마감할 때마다 저장되는 기록입니다. 실수로 삭제하거나 데이터가 꼬였을 때 해당 시점으로 돌아갈 수 있습니다.</p>
-      <div className="space-y-2 max-h-80 overflow-y-auto no-scrollbar">
-        {internalBackups.length > 0 ? internalBackups.map(b => (
-          <div key={b.id} className="flex justify-between items-center p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-blue-500/30 transition-colors">
-            <span className="text-[10px] font-bold text-gray-400">{new Date(b.timestamp).toLocaleString()}</span>
-            <button onClick={() => onRestore(b)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black shadow-lg hover:scale-105 active:scale-95 transition-all">복구</button>
-          </div>
-        )) : <div className="py-16 text-center text-gray-600 text-xs font-bold">생성된 백업이 없습니다.</div>}
+const Settings: React.FC<{ internalBackups: InternalBackup[], onRestore: (b: InternalBackup) => void, darkMode: boolean, setDarkMode: any, onReset: () => void, version: string }> = ({ internalBackups, onRestore, darkMode, setDarkMode, onReset, version }) => {
+  const handleForceUpdate = () => {
+    if (confirm('캐시를 무시하고 최신 코드로 강제 새로고침 하시겠습니까?')) {
+      // 쿼리 스트링을 붙여 새로고침하여 캐시 우회
+      window.location.href = window.location.pathname + '?v=' + new Date().getTime();
+    }
+  };
+
+  return (
+    <div className="max-w-xl mx-auto space-y-8 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-black italic">설정 / 관리</h2>
+        <div className="flex gap-2">
+          <button onClick={()=>setDarkMode(!darkMode)} className="p-4 bg-white/5 rounded-2xl text-xs font-bold border border-white/10 hover:bg-white/10 transition-colors">
+            {darkMode ? '🌙 다크' : '☀️ 라이트'}
+          </button>
+        </div>
+      </div>
+
+      <div className="apple-card p-6 border-t-4 border-indigo-500 bg-indigo-500/5 space-y-4">
+        <h3 className="text-sm font-black text-indigo-500">버전 및 캐시 관리</h3>
+        <p className="text-[11px] text-gray-500 font-bold">현재 버전: <span className="text-indigo-500">{version}</span></p>
+        <button onClick={handleForceUpdate} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all">
+          <i className="fas fa-sync-alt mr-2"></i>최신 버전으로 강제 업데이트
+        </button>
+        <p className="text-[10px] text-gray-400 leading-tight italic">* 업데이트가 반영되지 않을 때 클릭하세요.</p>
+      </div>
+
+      <div className="apple-card p-6 space-y-6">
+        <h3 className="text-sm font-black text-blue-500">자동 타임머신 복구</h3>
+        <p className="text-[11px] text-gray-500 leading-relaxed font-bold">정산 마감 시 자동 저장된 기록입니다.</p>
+        <div className="space-y-2 max-h-60 overflow-y-auto no-scrollbar">
+          {internalBackups.length > 0 ? internalBackups.map(b => (
+            <div key={b.id} className="flex justify-between items-center p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-blue-500/30 transition-colors">
+              <span className="text-[10px] font-bold text-gray-400">{new Date(b.timestamp).toLocaleString()}</span>
+              <button onClick={() => onRestore(b)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black shadow-lg hover:scale-105 active:scale-95 transition-all">복구</button>
+            </div>
+          )) : <div className="py-10 text-center text-gray-600 text-xs font-bold">생성된 백업이 없습니다.</div>}
+        </div>
+      </div>
+      
+      <div className="pt-10 flex flex-col gap-4">
+        <button onClick={onReset} className="w-full py-4 text-[10px] font-black text-rose-500/30 uppercase tracking-[0.3em] hover:text-rose-500 transition-colors underline decoration-dotted">전체 데이터 영구 삭제</button>
       </div>
     </div>
-    <div className="pt-10 flex flex-col gap-4">
-      <button onClick={onReset} className="w-full py-4 text-[10px] font-black text-rose-500/30 uppercase tracking-[0.3em] hover:text-rose-500 transition-colors">전체 데이터 영구 삭제</button>
-    </div>
-  </div>
-);
+  );
+};
 
 export default App;
