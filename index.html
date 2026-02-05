@@ -4,24 +4,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>경희장부 v21.0 - 통합 정산 시스템</title>
+    <title>경희장부 v24.1 - 통합 분석 시스템</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
         :root { --bg-main: #f5f5f7; --bg-surface: #ffffff; --text-primary: #1d1d1f; }
         .dark { --bg-main: #000000; --bg-surface: #111112; --text-primary: #f2f2f7; }
-        body { font-family: 'Pretendard', sans-serif; background-color: var(--bg-main); color: var(--text-primary); transition: background 0.3s; margin: 0; padding: 0; }
-        .apple-card { background-color: var(--bg-surface); border-radius: 28px; border: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03); }
+        body { 
+            font-family: 'Pretendard', sans-serif; 
+            background-color: var(--bg-main); 
+            color: var(--text-primary); 
+            transition: background 0.3s; 
+            margin: 0; padding: 0; overflow-x: hidden;
+        }
+        .apple-card { 
+            background-color: var(--bg-surface); 
+            border-radius: 28px; 
+            border: 1px solid rgba(255, 255, 255, 0.05); 
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03); 
+        }
         .dark .apple-card { box-shadow: 0 10px 50px rgba(0, 0, 0, 0.6); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        .recharts-responsive-container { min-height: 350px; }
     </style>
     <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "recharts": "https://esm.sh/recharts@2.12.7",
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "recharts": "https://esm.sh/recharts@2.12.7?deps=react@18.2.0",
     "xlsx": "https://esm.sh/xlsx@0.18.5",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/"
