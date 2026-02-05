@@ -24,7 +24,7 @@ const INITIAL_MENU: MenuItem[] = [
 const COLORS = ['#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE', '#5856D6', '#FF2D55'];
 
 const App: React.FC = () => {
-  const CURRENT_VERSION = 'v20.1';
+  const CURRENT_VERSION = 'v20.2';
   const [view, setView] = useState<'dashboard' | 'sales' | 'stats' | 'settings'>('dashboard');
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -96,16 +96,16 @@ const App: React.FC = () => {
 
   return (
     <div className={`min-h-screen pb-24 lg:pb-0 lg:pl-72 transition-colors duration-500 ${darkMode ? 'bg-black text-white' : 'bg-[#F5F5F7] text-black'}`}>
-      {/* 사이드바 네비게이션 */}
+      {/* 사이드바 네비게이션 - 괄호 누락 버그 수정 완료 */}
       <nav className={`fixed bottom-0 left-0 right-0 lg:top-0 lg:w-72 lg:h-full z-50 p-4 lg:p-8 flex lg:flex-col gap-2 lg:gap-6 ${darkMode ? 'bg-[#111112]/90 border-t border-white/5' : 'bg-white/90 border-t border-black/5'} lg:border-t-0 lg:border-r backdrop-blur-3xl`}>
-        <div className="hidden lg:block mb-8">
+        <div className="hidden lg:block mb-8 text-center lg:text-left">
           <h1 className="text-2xl font-black italic tracking-tighter bg-gradient-to-br from-blue-400 to-blue-600 bg-clip-text text-transparent">경희장부</h1>
           <p className="text-[10px] font-bold text-gray-500 mt-1 uppercase tracking-widest">Version {CURRENT_VERSION}</p>
         </div>
         <NavItem active={view === 'dashboard'} onClick={() => setView('dashboard')} icon="fa-house" label="홈" />
-        <NavItem active={view === 'sales'} onClick={() => setView('sales'} icon="fa-plus-circle" label="판매입력" />
-        <NavItem active={view === 'stats'} onClick={() => setView('stats'} icon="fa-chart-pie" label="정밀분석" />
-        <NavItem active={view === 'settings'} onClick={() => setView('settings'} icon="fa-shield-halved" label="장부관리" />
+        <NavItem active={view === 'sales'} onClick={() => setView('sales')} icon="fa-plus-circle" label="판매입력" />
+        <NavItem active={view === 'stats'} onClick={() => setView('stats')} icon="fa-chart-pie" label="정밀분석" />
+        <NavItem active={view === 'settings'} onClick={() => setView('settings')} icon="fa-shield-halved" label="장부관리" />
       </nav>
 
       {/* 메인 콘텐츠 영역 */}
@@ -114,7 +114,7 @@ const App: React.FC = () => {
           <div className="space-y-8">
             <header>
               <h2 className="text-3xl font-black tracking-tight">비즈니스 리포트</h2>
-              <p className="text-gray-500 font-bold mt-1 text-sm">사장님의 소중한 정산 데이터가 실시간으로 관리되고 있습니다.</p>
+              <p className="text-gray-500 font-bold mt-1 text-sm">사장님의 소중한 정산 데이터가 안전하게 관리되고 있습니다.</p>
             </header>
             
             {/* 상단 요약 카드 (전월 매출 포함) */}
@@ -129,18 +129,18 @@ const App: React.FC = () => {
                <div className="w-16 h-16 bg-blue-600 rounded-[22px] flex items-center justify-center shadow-2xl shadow-blue-500/40">
                   <i className="fas fa-check-double text-2xl text-white"></i>
                </div>
-               <h3 className="text-xl font-black italic">v20.1 하얀 화면 해결 및 기능 통합</h3>
+               <h3 className="text-xl font-black italic">v20.2 통합 시스템 정상 작동 중</h3>
                <p className="text-sm text-gray-500 font-bold leading-relaxed max-w-md">
-                 브라우저 문법 오류로 인한 하얀 화면을 해결했습니다.<br/>
-                 요청하신 엑셀 업로드, 임시저장, 전월 매출 기능이 정상 작동합니다.
+                 화면 멈춤 현상을 완벽히 해결했습니다.<br/>
+                 플랫폼별 임시저장과 엑셀 기능을 바로 이용하실 수 있습니다.
                </p>
             </div>
           </div>
         )}
 
-        {view === 'sales' && <SalesInputV21 menuItems={menuItems} platforms={platforms} onFinalSubmit={handleFinalSettlement} />}
+        {view === 'sales' && <SalesInputV22 menuItems={menuItems} platforms={platforms} onFinalSubmit={handleFinalSettlement} />}
         
-        {view === 'stats' && <StatsContainerV21 sales={sales} menuItems={menuItems} platforms={platforms} darkMode={darkMode} />}
+        {view === 'stats' && <StatsContainerV22 sales={sales} menuItems={menuItems} platforms={platforms} darkMode={darkMode} />}
 
         {view === 'settings' && (
           <div className="max-w-xl mx-auto space-y-8">
@@ -156,7 +156,7 @@ const App: React.FC = () => {
                        <span className="font-bold text-gray-500">{b.timestamp}</span>
                        <span className="font-black">{b.count}건 최종 마감 기록</span>
                     </div>
-                  )) : <p className="text-center py-8 text-gray-500 italic text-xs font-bold uppercase tracking-widest">No Backups Yet</p>}
+                  )) : <p className="text-center py-8 text-gray-500 italic text-xs font-bold uppercase tracking-widest">백업 내역이 없습니다</p>}
                 </div>
              </div>
              <div className="apple-card p-8 border-t-8 border-rose-500/30 space-y-4">
@@ -184,7 +184,7 @@ const NavItem: React.FC<{ active: boolean; onClick: () => void; icon: string; la
   </button>
 );
 
-const SalesInputV21: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig[], onFinalSubmit: (r: SaleRecord[]) => void }> = ({ menuItems, platforms, onFinalSubmit }) => {
+const SalesInputV22: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig[], onFinalSubmit: (r: SaleRecord[]) => void }> = ({ menuItems, platforms, onFinalSubmit }) => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [platform, setPlatform] = useState('');
   const [formData, setFormData] = useState<Record<string, { qty: string, price: string }>>({});
@@ -208,7 +208,7 @@ const SalesInputV21: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig
     if (newRecords.length === 0) return alert('입력된 판매 내역이 없습니다.');
     setTempQueue([...tempQueue, ...newRecords]);
     setFormData({});
-    alert(`${plat.name} 내역이 임시 저장되었습니다.`);
+    alert(`${plat.name} 내역이 임시 저장 리스트에 추가되었습니다.`);
   };
 
   const downloadTemplate = () => {
@@ -314,7 +314,7 @@ const SalesInputV21: React.FC<{ menuItems: MenuItem[], platforms: PlatformConfig
   );
 };
 
-const StatsContainerV21: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], platforms: PlatformConfig[], darkMode: boolean }> = ({ sales, menuItems, platforms, darkMode }) => {
+const StatsContainerV22: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], platforms: PlatformConfig[], darkMode: boolean }> = ({ sales, menuItems, platforms, darkMode }) => {
   const [tab, setTab] = useState<'time' | 'menu' | 'platform'>('time');
   const [timeUnit, setTimeUnit] = useState<'day' | 'month' | 'year'>('day');
 
@@ -350,14 +350,14 @@ const StatsContainerV21: React.FC<{ sales: SaleRecord[], menuItems: MenuItem[], 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Stats");
-    XLSX.writeFile(wb, `경희장부_통계_${tab}_v21.xlsx`);
+    XLSX.writeFile(wb, `경희장부_통계_${tab}_v22.xlsx`);
   };
 
   return (
     <div className="space-y-8 pb-20">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-black tracking-tighter">정밀 분석 리포트</h2>
-        <button onClick={exportExcel} className="p-3 bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 border border-white/5">통계 엑셀 다운로드</button>
+        <button onClick={exportExcel} className="p-3 bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 border border-white/5 transition-colors">통계 엑셀 다운로드</button>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4">
