@@ -7,7 +7,6 @@ import {
 } from 'recharts';
 import * as XLSX from 'xlsx';
 
-// --- 플랫폼 설정 ---
 const PLATFORMS = [
   { id: 'baemin', name: '배민', fee: 6.8 },
   { id: 'coupang', name: '쿠팡', fee: 9.8 },
@@ -65,7 +64,7 @@ const App = () => {
       <nav className={`fixed bottom-0 left-0 right-0 lg:top-0 lg:w-72 lg:h-full z-50 p-4 lg:p-8 flex lg:flex-col gap-2 ${darkMode ? 'bg-[#111112]/90 border-t border-white/5' : 'bg-white/90 border-t border-black/5'} lg:border-t-0 lg:border-r backdrop-blur-xl`}>
         <div className="hidden lg:block mb-8">
           <h1 className="text-2xl font-black italic tracking-tighter bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">경희장부</h1>
-          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Premium v24.2</p>
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Premium v24.3</p>
         </div>
         <NavBtn active={view === 'dashboard'} onClick={() => setView('dashboard')} icon="fa-house" label="홈" />
         <NavBtn active={view === 'sales'} onClick={() => setView('sales')} icon="fa-plus-circle" label="정산입력" />
@@ -99,7 +98,7 @@ const DashboardView = ({ summary, setView }: any) => (
       <div className="apple-card p-8 border-l-8 border-emerald-500"><p className="text-[11px] font-black text-gray-400 mb-2">주문 건수</p><p className="text-3xl font-black text-emerald-500">{summary.count.toLocaleString()}건</p></div>
     </div>
     <div className="apple-card p-10 bg-gradient-to-br from-blue-600/10 to-transparent flex flex-col md:flex-row justify-between items-center gap-6">
-      <div><h3 className="text-xl font-black mb-2">정산이 더 쉬워졌습니다 🚀</h3><p className="text-sm text-gray-500 font-bold">엑셀 업로드로 대량 정산을 한 번에 처리하세요.</p></div>
+      <div><h3 className="text-xl font-black mb-2">정산 시스템 정상 가동 중 🚀</h3><p className="text-sm text-gray-500 font-bold">이제 엑셀 업로드로 정산을 한 번에 처리하세요.</p></div>
       <button onClick={() => setView('sales')} className="px-10 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-xl hover:scale-105 transition-all">지금 입력하기</button>
     </div>
   </div>
