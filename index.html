@@ -4,16 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 캐시 방지 헤더 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>경희장부 v20.1 - 프리미엄 통합 정산</title>
-    <script>
-        // 서비스 워커 강제 제거로 유령 코드 방지
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
-        }
-    </script>
+    <title>경희장부 v20.2 - 통합 정산 시스템</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -39,13 +34,7 @@
 </head>
 <body>
     <div id="root"></div>
-    <script type="module">
-        // [수정] static import는 변수를 사용할 수 없으므로 dynamic import()를 사용해야 하얀 화면이 해결됩니다.
-        import('./index.tsx?v=' + Date.now()).catch(err => {
-            console.error('Module load error:', err);
-            // 만약 타임스탬프 로드 실패시 일반 로드 시도
-            import('./index.tsx');
-        });
-    </script>
+    <!-- 안정적인 표준 모듈 로드 방식으로 복구 -->
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>
