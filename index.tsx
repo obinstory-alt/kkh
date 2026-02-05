@@ -33,7 +33,13 @@ const App = () => {
 
   useEffect(() => {
     const saved = localStorage.getItem('kh_sales_v24_final');
-    if (saved) setSales(JSON.parse(saved));
+    if (saved) {
+      try {
+        setSales(JSON.parse(saved));
+      } catch (e) {
+        console.error("데이터 복구 실패", e);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -56,11 +62,10 @@ const App = () => {
 
   return (
     <div className={`min-h-screen pb-24 lg:pb-0 lg:pl-72 transition-all ${darkMode ? 'bg-black text-white' : 'bg-[#F5F5F7] text-black'}`}>
-      
       <nav className={`fixed bottom-0 left-0 right-0 lg:top-0 lg:w-72 lg:h-full z-50 p-4 lg:p-8 flex lg:flex-col gap-2 ${darkMode ? 'bg-[#111112]/90 border-t border-white/5' : 'bg-white/90 border-t border-black/5'} lg:border-t-0 lg:border-r backdrop-blur-xl`}>
         <div className="hidden lg:block mb-8">
           <h1 className="text-2xl font-black italic tracking-tighter bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">경희장부</h1>
-          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Premium v24.1</p>
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Premium v24.2</p>
         </div>
         <NavBtn active={view === 'dashboard'} onClick={() => setView('dashboard')} icon="fa-house" label="홈" />
         <NavBtn active={view === 'sales'} onClick={() => setView('sales')} icon="fa-plus-circle" label="정산입력" />
@@ -70,7 +75,7 @@ const App = () => {
 
       <main className="p-4 md:p-10 max-w-6xl mx-auto space-y-10">
         {view === 'dashboard' && <DashboardView summary={summary} setView={setView} />}
-        {view === 'sales' && <SalesInputView sales={sales} onSave={(newItems) => {setSales([...newItems, ...sales]); setView('stats');}} />}
+        {view === 'sales' && <SalesInputView onSave={(newItems: any) => {setSales([...newItems, ...sales]); setView('stats');}} />}
         {view === 'stats' && <StatsView sales={sales} darkMode={darkMode} />}
         {view === 'settings' && <SettingsView darkMode={darkMode} setDarkMode={setDarkMode} setSales={setSales} />}
       </main>
@@ -87,15 +92,15 @@ const NavBtn = ({ active, onClick, icon, label }: any) => (
 
 const DashboardView = ({ summary, setView }: any) => (
   <div className="space-y-10 animate-in fade-in duration-500">
-    <header><h2 className="text-4xl font-black">비즈니스 리포트</h2><p className="text-gray-500 font-bold mt-2">이달의 실시간 운영 현황입니다.</p></header>
+    <header><h2 className="text-4xl font-black">비즈니스 리포트</h2><p className="text-gray-500 font-bold mt-2">이달의 운영 요약입니다.</p></header>
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <div className="apple-card p-8 border-l-8 border-blue-600"><p className="text-[11px] font-black text-gray-400 mb-2">당월 매출</p><p className="text-3xl font-black text-blue-500">{summary.revenue.toLocaleString()}원</p></div>
       <div className="apple-card p-8 border-l-8 border-indigo-500"><p className="text-[11px] font-black text-gray-400 mb-2">정산 예정</p><p className="text-3xl font-black text-indigo-500">{summary.settlement.toLocaleString()}원</p></div>
       <div className="apple-card p-8 border-l-8 border-emerald-500"><p className="text-[11px] font-black text-gray-400 mb-2">주문 건수</p><p className="text-3xl font-black text-emerald-500">{summary.count.toLocaleString()}건</p></div>
     </div>
     <div className="apple-card p-10 bg-gradient-to-br from-blue-600/10 to-transparent flex flex-col md:flex-row justify-between items-center gap-6">
-      <div><h3 className="text-xl font-black mb-2">장부가 깨끗해졌습니다 ✨</h3><p className="text-sm text-gray-500 font-bold">이제 엑셀 업로드로 정산을 한 번에 끝내세요.</p></div>
-      <button onClick={() => setView('sales')} className="px-10 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-xl hover:scale-105 transition-all">정산 시작하기</button>
+      <div><h3 className="text-xl font-black mb-2">정산이 더 쉬워졌습니다 🚀</h3><p className="text-sm text-gray-500 font-bold">엑셀 업로드로 대량 정산을 한 번에 처리하세요.</p></div>
+      <button onClick={() => setView('sales')} className="px-10 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-xl hover:scale-105 transition-all">지금 입력하기</button>
     </div>
   </div>
 );
@@ -120,7 +125,7 @@ const SalesInputView = ({ onSave }: any) => {
         });
       }
     });
-    if (newItems.length === 0) return alert('수량을 입력하세요.');
+    if (newItems.length === 0) return alert('수량과 금액을 입력하세요.');
     setQueue([...queue, ...newItems]);
     setInputs({});
   };
@@ -179,7 +184,6 @@ const SalesInputView = ({ onSave }: any) => {
         </div>
         <button onClick={addToQueue} className="w-full py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-3xl font-black shadow-xl">항목 추가</button>
       </div>
-
       {queue.length > 0 && (
         <div className="apple-card p-10 border-t-8 border-emerald-500 space-y-6">
           <h2 className="text-xl font-black">정산 대기 ({queue.length}건)</h2>
@@ -206,7 +210,6 @@ const StatsView = ({ sales, darkMode }: any) => {
     const timeM: Record<string, number> = {};
     const menuM: Record<string, number> = {};
     const platM: Record<string, number> = {};
-
     sales.forEach(s => {
       const d = new Date(s.date);
       let k = grain === 'daily' ? d.toLocaleDateString() : grain === 'monthly' ? `${d.getFullYear()}-${d.getMonth()+1}` : `${d.getFullYear()}년`;
@@ -214,7 +217,6 @@ const StatsView = ({ sales, darkMode }: any) => {
       menuM[s.menuId] = (menuM[s.menuId] || 0) + s.totalPrice;
       platM[s.platformId] = (platM[s.platformId] || 0) + s.totalPrice;
     });
-
     return {
       time: Object.entries(timeM).sort((a,b)=>new Date(a[0]).getTime() - new Date(b[0]).getTime()).map(([label, revenue]) => ({ label, revenue })),
       menu: Object.entries(menuM).sort((a,b)=>b[1]-a[1]).map(([name, value]) => ({ name, value })),
@@ -222,37 +224,15 @@ const StatsView = ({ sales, darkMode }: any) => {
     };
   }, [sales, grain]);
 
-  const exportStats = () => {
-    const target = tab === 'time' ? data.time : (tab === 'menu' ? data.menu : data.plat);
-    const ws = XLSX.utils.json_to_sheet(target);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Stats");
-    XLSX.writeFile(wb, `경희장부_통계_${tab}.xlsx`);
-  };
-
-  if (sales.length === 0) return <div className="apple-card p-20 text-center font-black">데이터를 먼저 입력해주세요.</div>;
-
   return (
     <div className="space-y-8 animate-in fade-in">
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <h2 className="text-3xl font-black">정밀 분석</h2>
-        <button onClick={exportStats} className="px-6 py-4 bg-blue-600/10 text-blue-600 rounded-2xl text-xs font-black border border-blue-500/20"><i className="fas fa-file-excel mr-2"></i>통계 엑셀 다운</button>
-      </div>
+      <h2 className="text-3xl font-black">정밀 분석</h2>
       <div className="flex gap-2 p-1.5 bg-white/5 rounded-[24px] border border-white/5">
         {(['time', 'menu', 'platform'] as const).map(t => (
-          <button key={t} onClick={()=>setTab(t)} className={`flex-1 py-4 rounded-[18px] text-[11px] font-black transition-all ${tab===t?'bg-blue-600 text-white shadow-lg':'text-gray-500'}`}>
-            {t==='time'?'매출 추이':t==='menu'?'메뉴 순위':'플랫폼 점유'}
-          </button>
+          <button key={t} onClick={()=>setTab(t)} className={`flex-1 py-4 rounded-[18px] text-[11px] font-black transition-all ${tab===t?'bg-blue-600 text-white shadow-lg':'text-gray-500'}`}>{t==='time'?'매출 추이':t==='menu'?'메뉴 순위':'플랫폼 점유'}</button>
         ))}
       </div>
-      {tab === 'time' && (
-        <div className="flex gap-2 justify-end">
-          {(['daily', 'monthly', 'yearly'] as const).map(g => (
-            <button key={g} onClick={()=>setGrain(g)} className={`px-5 py-2 rounded-xl text-[10px] font-black border ${grain===g?'bg-blue-600 border-blue-600 text-white':'bg-white/5 border-white/10 text-gray-500'}`}>{g==='daily'?'일별':g==='monthly'?'월별':'연별'}</button>
-          ))}
-        </div>
-      )}
-      <div className="apple-card p-10 border-t-8 border-indigo-600 min-h-[450px]">
+      <div className="apple-card p-10 border-t-8 border-indigo-600">
         <ResponsiveContainer width="100%" height={400}>
           {tab === 'time' ? (
             <AreaChart data={data.time}>
@@ -283,9 +263,7 @@ const SettingsView = ({ darkMode, setDarkMode, setSales }: any) => (
     <h2 className="text-3xl font-black">설정</h2>
     <div className="apple-card p-8 space-y-6">
       <div className="flex justify-between items-center"><span>화면 모드</span><button onClick={()=>setDarkMode(!darkMode)} className="px-6 py-3 bg-white/5 rounded-2xl border border-white/10 text-xs font-black">{darkMode?'🌙 다크':'☀️ 라이트'}</button></div>
-      <div className="pt-6 border-t border-white/5">
-        <button onClick={()=>{if(confirm('데이터를 초기화할까요?')){setSales([]); localStorage.clear(); window.location.reload();}}} className="w-full py-4 bg-rose-500/10 text-rose-500 rounded-2xl text-xs font-black">데이터 전체 삭제</button>
-      </div>
+      <button onClick={()=>{if(confirm('모든 데이터를 초기화할까요?')){setSales([]); localStorage.clear(); window.location.reload();}}} className="w-full py-4 bg-rose-500/10 text-rose-500 rounded-2xl text-xs font-black">데이터 전체 삭제</button>
     </div>
   </div>
 );
