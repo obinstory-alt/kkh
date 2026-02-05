@@ -1,1 +1,48 @@
 
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>경희장부 v20.0 - 프리미엄 통합 정산</title>
+    <script>
+        // 구버전 서비스 워커 강제 제거
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+        }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
+        :root { --bg-main: #f5f5f7; --bg-surface: #ffffff; --text-primary: #1d1d1f; }
+        .dark { --bg-main: #000000; --bg-surface: #111112; --text-primary: #f2f2f7; }
+        body { font-family: 'Pretendard', sans-serif; background-color: var(--bg-main); color: var(--text-primary); transition: background 0.3s; }
+        .apple-card { background-color: var(--bg-surface); border-radius: 28px; border: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03); }
+        .dark .apple-card { box-shadow: 0 10px 50px rgba(0, 0, 0, 0.6); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "xlsx": "https://esm.sh/xlsx@0.18.5"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module">
+        // 매 실행 시 고유 주소로 스크립트 로드하여 캐시 고착 원천 차단
+        import './index.tsx?v=' + Date.now();
+    </script>
+</body>
+</html>
